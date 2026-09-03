@@ -187,13 +187,14 @@ def _make_tool(spec: dict, tool_entry: dict, trace: Trace) -> Tool:
 def _make_model(spec: dict) -> Model:
     """按 spec 构造 smolagents LiteLLMModel（模块级可注入，便于测试替换假模型）。
 
-    模型 id 去掉 "openai/" 前缀（CodeAgent 生成的代码无需 provider 前缀）；
-    api_key 取 spec["api_key_env"] 指向的环境变量，未设置则 None
-    （交由端点/代理自行处理）；temperature / max_completion_tokens 取自 model_params
-    （max_tokens 兼容旧配置）。
+    model_id 保留 litellm 的 provider 前缀（如 "openai/deepseek-v4-flash"）：
+    LiteLLMModel 原样转发给 litellm.completion，未知模型必须有前缀才能路由
+    （2026-09 真实实验：剥离前缀导致 "LLM Provider NOT provided" 全线失败）。
+    api_key 取 spec["api_key_env"] 指向的环境变量，未设置则 None；
+    temperature / max_completion_tokens 取自 model_params（max_tokens 兼容旧配置）。
     """
     params = spec.get("model_params") or {}
-    model_id = spec["litellm_model"].removeprefix("openai/")
+    model_id = spec["litellm_model"]
     env_name = spec.get("api_key_env") or ""
     api_key = os.environ.get(env_name) if env_name else None
     kwargs: dict[str, Any] = {
