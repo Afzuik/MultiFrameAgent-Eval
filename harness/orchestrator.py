@@ -54,11 +54,13 @@ RESULT_COLUMNS = [
 ADAPTER_MODULES = {
     "react": "harness.adapters.react",
     "smolagents": "harness.adapters.smolagents",
+    "openhands": "harness.adapters.openhands",
 }
-# 框架级步数预算系数（v1.1：smolagents 代码生成循环比 JSON 协议需要更多步数）
+# 框架级步数预算系数（v1.1：代码生成/重框架循环比 JSON 协议需要更多步数）
 FRAMEWORK_STEP_SCALE = {
     "react": 1.0,
     "smolagents": 1.5,
+    "openhands": 1.5,
 }
 SERVER_READY_TIMEOUT_S = 30.0      # mock 服务就绪轮询上限
 SERVER_GRACE_S = 30.0              # 单任务 subprocess 超时裕量
