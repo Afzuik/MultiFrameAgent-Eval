@@ -8,9 +8,9 @@ runs:
     note: "ReAct × deepseek-v4-flash"
   - group: R2
     framework: react
-    model: qwen2.5-72b-instruct
+    model: mimo-v2.5-pro
     domains: [travel, shop, analytics]
-    note: "ReAct × Qwen2.5-72B（消融：换模型）"
+    note: "ReAct × MiMo-v2.5-Pro（消融：换模型）"
   - group: S1
     framework: smolagents
     model: deepseek-v4-flash
@@ -18,16 +18,16 @@ runs:
     note: "smolagents × deepseek-v4-flash"
   - group: S2
     framework: smolagents
-    model: qwen2.5-72b-instruct
+    model: mimo-v2.5-pro
     domains: [travel, shop, analytics]
-    note: "smolagents × Qwen2.5-72B（消融）"
+    note: "smolagents × MiMo-v2.5-Pro（消融）"
   - group: O1
     framework: openhands
     model: deepseek-v4-flash
     domains: [travel, shop, analytics]
-    note: "OpenHands × deepseek-v4-flash（W3）"
+    note: "OpenHands × deepseek-v4-flash（W3 方案 C；真实实验待 W4 方案 A 回归后）"
   - group: O2
     framework: openhands
-    model: qwen2.5-72b-instruct
+    model: mimo-v2.5-pro
     domains: [travel, shop, analytics]
-    note: "OpenHands × Qwen2.5-72B（W3）"
+    note: "OpenHands × MiMo-v2.5-Pro（W3 方案 C）"
