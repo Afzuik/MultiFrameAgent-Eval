@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -90,14 +91,12 @@ def _completion_cost(resp: Any) -> float:
         return 0.0
 
 
-def _call_llm(spec: dict, messages: list[dict]) -> tuple[str, Any]:
-    """调用 LiteLLM（openai 兼容端点），返回 (原始输出文本, 响应对象)。
+def _call_llm_direct(spec: dict, messages: list[dict]) -> tuple[str, Any]:
+    """直接调 LiteLLM（openai 兼容端点），返回 (原始输出文本, 响应对象)。
 
     api_key 取 spec["api_key_env"] 指向的环境变量；未设置则传 None（交由端点/
     代理自行处理）。model 直接使用 spec["litellm_model"]（保留 provider 前缀，
     W2 真实实验教训：剥离前缀 → LLM Provider NOT provided）。
-    # TODO(成本): 真实成本统计后续用 litellm 回调完善（§7.3），现按 best-effort
-    # 由 litellm.completion_cost 换算，换算失败记 0.0。
     """
     params = spec.get("model_params") or {}
     env_name = spec.get("api_key_env") or ""
@@ -116,6 +115,32 @@ def _call_llm(spec: dict, messages: list[dict]) -> tuple[str, Any]:
         return content, resp
     # 内容非字符串（罕见）时序列化为 JSON 文本，保证下游统一按字符串处理
     return json.dumps(content, ensure_ascii=False), resp
+
+
+def _call_llm(spec: dict, messages: list[dict]) -> tuple[str, Any]:
+    """带墙钟兜底的模型调用（与 react 同款修复，见 react._call_llm docstring）。
+
+    2026-09 真实实验：某端点"接受连接但永不返回数据"，litellm timeout 不生效，
+    单次调用挂死整个任务（O2 tr_006 挂起 31 分钟）。daemon 线程 + join 兜底，
+    超时抛 TimeoutError，由调用方转为 status=timeout。
+    """
+    timeout_s = float((spec.get("model_params") or {}).get("api_timeout_s", 120))
+    box: dict = {}
+
+    def worker() -> None:
+        try:
+            box["result"] = _call_llm_direct(spec, messages)
+        except Exception as exc:
+            box["exc"] = exc
+
+    thread = threading.Thread(target=worker, daemon=True, name="openhands-llm-call")
+    thread.start()
+    thread.join(timeout_s)
+    if thread.is_alive():
+        raise TimeoutError(f"模型调用超过 {timeout_s:.0f}s 无响应")
+    if "exc" in box:
+        raise box["exc"]
+    return box["result"]
 
 
 def _invoke_tool(spec: dict, tool_name: str, tool_args: dict) -> str:
@@ -283,7 +308,12 @@ def _run_real(trace: Trace, spec: dict, budget: RunBudget,
             return EXIT_BUDGET
 
         # ---- 取得本轮模型输出（真实调用 LiteLLM）----
-        raw, resp = _call_llm(spec, messages)
+        try:
+            raw, resp = _call_llm(spec, messages)
+        except TimeoutError:
+            # 单次模型调用墙钟兜底超时（端点挂死场景）→ 按预算超时计
+            trace.status = STATUS_TIMEOUT
+            return EXIT_BUDGET
         tokens_in = _usage(resp, "prompt_tokens")
         tokens_out = _usage(resp, "completion_tokens")
         cost_usd = _completion_cost(resp)

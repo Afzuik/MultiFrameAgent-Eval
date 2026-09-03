@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -72,11 +73,11 @@ def _completion_cost(resp: Any) -> float:
         return 0.0
 
 
-def _call_llm(spec: dict, messages: list[dict]) -> tuple[str, Any]:
-    """调用 LiteLLM（openai 兼容端点），返回 (原始输出文本, 响应对象)。
+def _call_llm_direct(spec: dict, messages: list[dict]) -> tuple[str, Any]:
+    """直接调 LiteLLM（openai 兼容端点），返回 (原始输出文本, 响应对象)。
 
     api_key 取 spec["api_key_env"] 指向的环境变量；未设置则传 None
-    （交由端点/代理自行处理）。
+    （交由端点/代理自行处理）。不经 _call_llm 的线程兜底，仅供内部使用。
     """
     params = spec.get("model_params") or {}
     env_name = spec.get("api_key_env") or ""
@@ -95,6 +96,33 @@ def _call_llm(spec: dict, messages: list[dict]) -> tuple[str, Any]:
         return content, resp
     # 内容非字符串（罕见）时序列化为 JSON 文本，保证下游统一按字符串处理
     return json.dumps(content, ensure_ascii=False), resp
+
+
+def _call_llm(spec: dict, messages: list[dict]) -> tuple[str, Any]:
+    """带墙钟兜底的模型调用（模块级可注入，测试 monkeypatch 本函数）。
+
+    2026-09 真实实验教训：某 openai 兼容端点会"接受连接但永不返回数据"，
+    litellm 的 timeout 参数对该场景不生效，单次调用挂死整个任务（O2 tr_006
+    挂起 31 分钟）。故用 daemon 线程 + join 兜底：超时抛 TimeoutError，
+    由 _run_loop 转为 status=timeout；worker 线程随进程退出回收。
+    """
+    timeout_s = float((spec.get("model_params") or {}).get("api_timeout_s", 120))
+    box: dict = {}
+
+    def worker() -> None:
+        try:
+            box["result"] = _call_llm_direct(spec, messages)
+        except Exception as exc:  # 原样转交主线程抛出
+            box["exc"] = exc
+
+    thread = threading.Thread(target=worker, daemon=True, name="react-llm-call")
+    thread.start()
+    thread.join(timeout_s)
+    if thread.is_alive():
+        raise TimeoutError(f"模型调用超过 {timeout_s:.0f}s 无响应")
+    if "exc" in box:
+        raise box["exc"]
+    return box["result"]
 
 
 def _invoke_tool(spec: dict, tool_name: str, tool_args: dict) -> str:
@@ -232,7 +260,12 @@ def _run_loop(trace: Trace, spec: dict, budget: RunBudget,
             cost_usd = 0.0
             turns += 1
         else:
-            raw, resp = _call_llm(spec, messages)
+            try:
+                raw, resp = _call_llm(spec, messages)
+            except TimeoutError:
+                # 单次模型调用墙钟兜底超时（端点挂死场景）→ 按预算超时计
+                trace.status = STATUS_TIMEOUT
+                return EXIT_BUDGET
             tokens_in = _usage(resp, "prompt_tokens")
             tokens_out = _usage(resp, "completion_tokens")
             cost_usd = _completion_cost(resp)
