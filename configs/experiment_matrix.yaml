@@ -1,13 +1,33 @@
-# 实验矩阵（§9.1）。W2 启用 R1（react）与 S1（smolagents）两组 × 全量三域 40 任务。
-# 后续里程碑追加 R2/S2/O1/O2 组。
+# 实验矩阵（§9.1）。W3 全量 6 组：3 框架 × 2 backbone，全量三域 40 任务。
+# O 组依赖 openhands 适配器（W3 落地后即可运行）。
 runs:
   - group: R1
     framework: react
     model: deepseek-v4-flash
     domains: [travel, shop, analytics]
-    note: "ReAct × deepseek-v4-flash，全量 40 任务"
+    note: "ReAct × deepseek-v4-flash"
+  - group: R2
+    framework: react
+    model: qwen2.5-72b-instruct
+    domains: [travel, shop, analytics]
+    note: "ReAct × Qwen2.5-72B（消融：换模型）"
   - group: S1
     framework: smolagents
     model: deepseek-v4-flash
     domains: [travel, shop, analytics]
-    note: "smolagents × deepseek-v4-flash，全量 40 任务"
+    note: "smolagents × deepseek-v4-flash"
+  - group: S2
+    framework: smolagents
+    model: qwen2.5-72b-instruct
+    domains: [travel, shop, analytics]
+    note: "smolagents × Qwen2.5-72B（消融）"
+  - group: O1
+    framework: openhands
+    model: deepseek-v4-flash
+    domains: [travel, shop, analytics]
+    note: "OpenHands × deepseek-v4-flash（W3）"
+  - group: O2
+    framework: openhands
+    model: qwen2.5-72b-instruct
+    domains: [travel, shop, analytics]
+    note: "OpenHands × Qwen2.5-72B（W3）"

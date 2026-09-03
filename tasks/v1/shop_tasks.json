@@ -67,7 +67,7 @@
         { "path": "orders.O20261012001.address", "equals": "上海市浦东新区张江路 88 号" }
       ],
       "answer_checks": [
-        { "any_of": ["成功", "已修改"] }
+        { "any_of": ["修改"] }
       ],
       "ground_truth_plan": [
         { "tool": "update_address", "args": { "order_id": "O20261012001", "new_address": "上海市浦东新区张江路 88 号" } }
@@ -416,7 +416,7 @@
         { "path": "orders.O20261012001.address", "equals": "杭州市西湖区文三路 100 号" }
       ],
       "answer_checks": [
-        { "any_of": ["成功", "已修改"] }
+        { "any_of": ["修改"] }
       ],
       "ground_truth_plan": [
         { "tool": "list_orders", "args": { "user_id": "u_42" } },

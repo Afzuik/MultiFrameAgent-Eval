@@ -55,6 +55,11 @@ ADAPTER_MODULES = {
     "react": "harness.adapters.react",
     "smolagents": "harness.adapters.smolagents",
 }
+# 框架级步数预算系数（v1.1：smolagents 代码生成循环比 JSON 协议需要更多步数）
+FRAMEWORK_STEP_SCALE = {
+    "react": 1.0,
+    "smolagents": 1.5,
+}
 SERVER_READY_TIMEOUT_S = 30.0      # mock 服务就绪轮询上限
 SERVER_GRACE_S = 30.0              # 单任务 subprocess 超时裕量
 
@@ -201,8 +206,13 @@ def _run_one_task(
         }
 
     # 2) 预算（§6.4：任务 max_steps 覆盖步数，其余取配置默认）
+    # v1.1：smolagents(CodeAgent) 步数预算 ×1.5 —— 真实实验 an_004 显示
+    # 10 步对 CodeAgent 的代码生成循环偏紧（跨表 JOIN 预算耗尽），
+    # 框架级放宽容忍其"多试几步"的恢复行为，效率差异由 F1/调用数体现。
+    step_scale = FRAMEWORK_STEP_SCALE.get(framework, 1.0)
+    base_steps = int(task.get("max_steps") or default_budget.get("max_steps", 12))
     budget = RunBudget(
-        max_steps=int(task.get("max_steps") or default_budget.get("max_steps", 12)),
+        max_steps=max(1, int(base_steps * step_scale)),
         timeout_s=float(default_budget.get("timeout_s", 180)),
         max_cost_usd=float(default_budget.get("max_cost_usd", 0.05)),
     )

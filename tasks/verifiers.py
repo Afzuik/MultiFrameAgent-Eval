@@ -13,10 +13,16 @@ final_state_checks / answer_checks）直接判定 pass/fail，
 from __future__ import annotations
 
 import json
+import re
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 TASKS_DIR = Path(__file__).resolve().parent / "v1"
+
+# 纯数字 token：数字（可含千分位逗号）+ 可选小数（answer_checks 数值容忍匹配用）
+_NUMBER_TOKEN = re.compile(r"^\d[\d,]*(?:\.\d+)?$")
+_NUMBER_IN_TEXT = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
 def _deep_get(state: dict, path: str) -> Any:
@@ -51,6 +57,29 @@ def has_call(calls: list[dict], tool: str, expected_args: dict | None = None) ->
     return False
 
 
+def _numeric_hit(answer: str, needle: str) -> bool:
+    """数字容忍匹配（v1.1 修正，源于真实实验的千分位假阴性）。
+
+    needle 是纯数字 token（如 "21680"）时，在 answer 中按**数值精确相等**
+    查找数字（自动容忍 "21,680" / "21,680.00" 等格式）；
+    用 Decimal 相等而非子串，避免 "690" 误匹配 "6,900"（→6900）。
+    needle 非数字 token 时恒返回 False（走原生子串匹配）。
+    """
+    if not _NUMBER_TOKEN.fullmatch(needle):
+        return False
+    try:
+        target = Decimal(needle.replace(",", ""))
+    except InvalidOperation:
+        return False
+    for match in _NUMBER_IN_TEXT.finditer(answer):
+        try:
+            if Decimal(match.group().replace(",", "")) == target:
+                return True
+        except InvalidOperation:
+            continue
+    return False
+
+
 def verify_task(
     task: dict,
     calls: list[dict],
@@ -78,8 +107,11 @@ def verify_task(
             findings.append(f"state_missing:{sc['path']}")
 
     for ac in task.get("answer_checks", []):
-        if "contains" in ac and ac["contains"] not in answer:
-            findings.append(f"answer_missing:{ac['contains']}")
+        if "contains" in ac:
+            needle = str(ac["contains"])
+            # v1.1：子串未命中时对纯数字 needle 做数值相等匹配（容忍千分位/小数格式）
+            if needle not in answer and not _numeric_hit(answer, needle):
+                findings.append(f"answer_missing:{needle}")
         if "not_contains" in ac and ac["not_contains"] in answer:
             findings.append(f"answer_forbidden:{ac['not_contains']}")
         if "any_of" in ac and not any(item in answer for item in ac["any_of"]):

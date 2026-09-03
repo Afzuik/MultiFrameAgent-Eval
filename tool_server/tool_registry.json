@@ -103,7 +103,7 @@
     "shop": [
       {
         "name": "get_order_status",
-        "description": "查询订单状态。订单不存在时返回 not_found。",
+        "description": "查询订单状态，返回订单完整信息（含商品、金额、状态、收货地址 address、物流单号 tracking、发票 invoice）。订单不存在时返回 not_found。",
         "parameters": {
           "type": "object",
           "properties": { "order_id": { "type": "string" } },

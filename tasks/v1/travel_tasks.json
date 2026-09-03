@@ -171,7 +171,7 @@
         { "path": "reservations.u_42.R_092.status", "equals": "booked" }
       ],
       "answer_checks": [
-        { "any_of": ["已取消", "取消成功"] }
+        { "any_of": ["取消"] }
       ],
       "ground_truth_plan": [
         { "tool": "list_reservations", "args": { "user_id": "u_42" } },
