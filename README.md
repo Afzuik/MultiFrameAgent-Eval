@@ -32,15 +32,16 @@ EVAL_DRY_RUN=1 .venv/bin/python -m harness.orchestrator \
 
 产出目录 `runs/<日期>_<group>/`：`config.yaml`（配置快照）、`traces/{task_id}.jsonl`（轨迹）、`results.csv`（结果行）、`summary.json`（汇总指标）。
 
-## 项目状态（W1 ✅）
+## 项目状态（W2 ✅）
 
-- [x] 仓库初始化：uv + ruff + pytest，Python 3.12
-- [x] 任务集 v1.0：40 任务（3 域 × L1/L2/L3）+ 声明式 verifier 引擎 + 双向自检 80/80
-- [x] mock 工具服务：FastAPI，18 工具（travel 7 / shop 6 / analytics 5），权限与业务规则、实例隔离、确定性，62 项测试
-- [x] 评测装置：harness.protocol 契约 + 自研 ReAct 适配器 + 薄编排器 v0（子进程调度 / 超时强杀 / 断点续跑 / fake_llm dry-run）
-- [x] 指标：metrics.success / cost_latency / aggregate（SR、成本、延迟、summary.json）
-- [x] 验收：dry-run 跑通 travel 域 14 任务，SR = 14/14（`runs/2026-09-03_R1/`），全仓 196 测试全绿
-- [ ] W2：shop/analytics 任务接入、smolagents 适配器、Tool-Call F1、真实模型实验
+- [x] W1 全部（见 git log：任务集 / mock 服务 / ReAct 适配器 / 编排器 v0 / metrics）
+- [x] smolagents 适配器：CodeAgent + LiteLLMModel，同 §6.3 CLI 契约，fake_llm dry-run 一致
+- [x] Tool-Call F1（§7.2 口径）：metrics/tool_f1.py，results.csv 新增 f1_recall/f1_precision/f1 三列
+- [x] 失败模式分类 v0（§10.1 六类）：analysis/failure_modes.py + `failure_modes.json`
+- [x] 实验矩阵：R1（react）/ S1（smolagents）× deepseek-v4-flash × 全量 40 任务
+- [x] 验收：dry-run 两组 80/80 PASS，SR/F1/成本/延迟四指标齐（`runs/2026-09-03_R1|S1/`），全仓 229 测试全绿
+- [ ] 真实模型实验：设置 `DEEPSEEK_API_KEY` 后去掉 `EVAL_DRY_RUN=1` 重跑即可
+- [ ] W3：OpenHands 适配器、LLM-as-judge、全量 6 组实验
 
 ## 文档
 
