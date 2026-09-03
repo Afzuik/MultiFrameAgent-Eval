@@ -88,6 +88,7 @@ def _call_llm(spec: dict, messages: list[dict]) -> tuple[str, Any]:
         messages=messages,
         temperature=params.get("temperature", 0.2),
         max_tokens=params.get("max_tokens", 4096),
+        timeout=float(params.get("api_timeout_s", 120)),
     )
     content = resp.choices[0].message.content
     if isinstance(content, str):
