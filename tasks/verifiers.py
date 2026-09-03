@@ -96,6 +96,16 @@ def verify_answer_checks(task: dict, answer: str) -> list[str]:
     return findings
 
 
+def _ws_normalize(value: Any) -> Any:
+    """v1.2：字符串比较前去除全部空白字符。
+
+    真实实验假阴性案例：模型把地址写成"…88号"而任务期望"…88 号"——
+    工具接受、状态正确，仅因终态字符串精确比对判负。地址/文本类 equals
+    比较统一做空白归一化（数值与布尔不受影响）。
+    """
+    return re.sub(r"\s+", "", value) if isinstance(value, str) else value
+
+
 def verify_task(
     task: dict,
     calls: list[dict],
@@ -115,7 +125,8 @@ def verify_task(
 
     for sc in task.get("final_state_checks", []):
         value = _deep_get(final_state, sc["path"])
-        if "equals" in sc and value != sc["equals"]:
+        # v1.2：equals 的字符串比较做空白归一化（"88 号" vs "88号" 假阴性）
+        if "equals" in sc and _ws_normalize(value) != _ws_normalize(sc["equals"]):
             findings.append(
                 f"state_mismatch:{sc['path']} expected={sc['equals']!r} got={value!r}"
             )

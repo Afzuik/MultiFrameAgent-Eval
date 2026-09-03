@@ -64,6 +64,8 @@ FRAMEWORK_STEP_SCALE = {
 }
 SERVER_READY_TIMEOUT_S = 30.0      # mock 服务就绪轮询上限
 SERVER_GRACE_S = 30.0              # 单任务 subprocess 超时裕量
+# v1.2：连续 N 个任务 wall-clock 超时 → 判定端点故障并中止本组
+ENDPOINT_FLAKY_THRESHOLD = 3
 
 
 # --------------------------------------------------------------------------
@@ -331,6 +333,9 @@ def run_group(group: dict, models_cfg: dict, default_budget: dict,
     done_ids = _load_existing_task_ids(results_csv)
     n_passed = 0
     n_total = 0
+    # v1.2：端点抖动检测——连续多个任务超时说明端点故障而非模型问题，
+    # 中止本组并保留已记录行（断点续跑可恢复），避免烧穿整组预算。
+    consecutive_timeouts = 0
     for domain in group.get("domains", []):
         for task in protocol.load_tasks(domain):
             task_id = task["task_id"]
@@ -342,12 +347,23 @@ def run_group(group: dict, models_cfg: dict, default_budget: dict,
             _append_result(results_csv, row)
             done_ids.add(task_id)
             n_total += 1
+            if row["status"] == protocol.STATUS_TIMEOUT:
+                consecutive_timeouts += 1
+            else:
+                consecutive_timeouts = 0
             mark = "PASS" if row["passed"] == "True" else "FAIL"
             n_passed += 1 if row["passed"] == "True" else 0
             print(f"[{group_name}] {task_id} {mark} "
                   f"findings={row['findings']} "
                   f"f1={row.get('f1', '')} "
                   f"cost={row['cost_usd']}$ time={row['wall_time_s']}s")
+            if consecutive_timeouts >= ENDPOINT_FLAKY_THRESHOLD:
+                print(f"[{group_name}] 连续 {ENDPOINT_FLAKY_THRESHOLD} 个任务超时，"
+                      f"疑似端点故障，中止本组（已记录 {n_total} 行，可断点续跑恢复）")
+                break
+        else:
+            continue
+        break  # 外层循环同样中止
     if n_total:
         print(f"[{group_name}] 汇总: SR={n_passed}/{n_total} "
               f"(results.csv: {results_csv})")
