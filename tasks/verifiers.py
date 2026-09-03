@@ -80,6 +80,22 @@ def _numeric_hit(answer: str, needle: str) -> bool:
     return False
 
 
+def verify_answer_checks(task: dict, answer: str) -> list[str]:
+    """只执行 answer_checks 维度，返回 findings（供离线复评等场景单独使用）。"""
+    findings: list[str] = []
+    for ac in task.get("answer_checks", []):
+        if "contains" in ac:
+            needle = str(ac["contains"])
+            # v1.1：子串未命中时对纯数字 needle 做数值相等匹配（容忍千分位/小数格式）
+            if needle not in answer and not _numeric_hit(answer, needle):
+                findings.append(f"answer_missing:{needle}")
+        if "not_contains" in ac and ac["not_contains"] in answer:
+            findings.append(f"answer_forbidden:{ac['not_contains']}")
+        if "any_of" in ac and not any(item in answer for item in ac["any_of"]):
+            findings.append(f"answer_any_of_missing:{ac['any_of']}")
+    return findings
+
+
 def verify_task(
     task: dict,
     calls: list[dict],
@@ -106,16 +122,7 @@ def verify_task(
         elif sc.get("exists") and value is None:
             findings.append(f"state_missing:{sc['path']}")
 
-    for ac in task.get("answer_checks", []):
-        if "contains" in ac:
-            needle = str(ac["contains"])
-            # v1.1：子串未命中时对纯数字 needle 做数值相等匹配（容忍千分位/小数格式）
-            if needle not in answer and not _numeric_hit(answer, needle):
-                findings.append(f"answer_missing:{needle}")
-        if "not_contains" in ac and ac["not_contains"] in answer:
-            findings.append(f"answer_forbidden:{ac['not_contains']}")
-        if "any_of" in ac and not any(item in answer for item in ac["any_of"]):
-            findings.append(f"answer_any_of_missing:{ac['any_of']}")
+    findings.extend(verify_answer_checks(task, answer))
 
     return (not findings, findings)
 
