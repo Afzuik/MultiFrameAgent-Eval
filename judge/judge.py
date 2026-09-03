@@ -33,8 +33,11 @@ from judge.prompts import build_judge_messages
 from judge.rubric import MAX_SCORE, MIN_SCORE
 from metrics.success import load_task
 
-# 单次评分的 token 上限：judge 只需输出一个小 JSON，设小值省成本（§8.1）
-JUDGE_MAX_TOKENS = 256
+# 单次评分的 token 上限。评分输出本身很小，但 deepseek-v4-flash 是推理模型：
+# 思考 token 计入 max_tokens，256 会被思考吃光导致 content 为空
+# （2026-09 真实 judge 运行 27/80 回退的根因），故上调到 1024；
+# 模型配置可用 judge_max_tokens 键覆盖。
+JUDGE_MAX_TOKENS = 1024
 # 单次 completion 超时（秒）；LiteLLM 默认无超时，必须显式给出（§13 风险7）
 JUDGE_TIMEOUT_S = 120.0
 

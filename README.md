@@ -32,16 +32,15 @@ EVAL_DRY_RUN=1 .venv/bin/python -m harness.orchestrator \
 
 产出目录 `runs/<日期>_<group>/`：`config.yaml`（配置快照）、`traces/{task_id}.jsonl`（轨迹）、`results.csv`（结果行）、`summary.json`（汇总指标）。
 
-## 项目状态（W2 ✅）
+## 项目状态（W3 ✅）
 
-- [x] W1 全部（见 git log：任务集 / mock 服务 / ReAct 适配器 / 编排器 v0 / metrics）
-- [x] smolagents 适配器：CodeAgent + LiteLLMModel，同 §6.3 CLI 契约，fake_llm dry-run 一致
-- [x] Tool-Call F1（§7.2 口径）：metrics/tool_f1.py，results.csv 新增 f1_recall/f1_precision/f1 三列
-- [x] 失败模式分类 v0（§10.1 六类）：analysis/failure_modes.py + `failure_modes.json`
-- [x] 实验矩阵：R1（react）/ S1（smolagents）× deepseek-v4-flash × 全量 40 任务
-- [x] 验收：dry-run 两组 80/80 PASS，SR/F1/成本/延迟四指标齐（`runs/2026-09-03_R1|S1/`），全仓 229 测试全绿
-- [ ] 真实模型实验：设置 `DEEPSEEK_API_KEY` 后去掉 `EVAL_DRY_RUN=1` 重跑即可
-- [ ] W3：OpenHands 适配器、LLM-as-judge、全量 6 组实验
+- [x] W1/W2 全部（任务集 / mock 服务 / 三框架适配器 / 编排器 / F1 / 失败分类 / 真实实验）
+- [x] v1.1 修正：verifier 数字归一化匹配、措辞宽松、工具描述补全、校验清单新项、smolagents 步数 ×1.5
+- [x] OpenHands 适配器：§6.5 时间盒如实落地方案 C（SDK 新架构 + 无 Docker，W4 回归补 A），fake_llm + CLI 契约 + 6 测试
+- [x] LLM-as-judge：rubric 1~5 + 双 judge + 一致性 + 轨迹压缩匿名化 + 兜底（13 测试）；真实运行 R1 mean 4.38 / agreement 92.5%
+- [x] analysis/report.py：6 章节 markdown 报告生成器（6 测试）
+- [x] 实验矩阵 6 组（R1/R2/S1/S2/O1/O2）；O1 dry-run 40/40
+- [ ] W4：dashboard、失败案例深挖、judge 锚定、方案 A 回归、R2/S2/O 组真实实验（需 qwen key）
 
 ## 文档
 
