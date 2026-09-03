@@ -1,0 +1,319 @@
+{
+  "version": "1.0",
+  "note": "AgentEval 工具注册表与确定性 fixture 数据。mock 服务、任务集、verifier 必须与此文件保持一致。价格单位统一为分(cent)。",
+  "tools": {
+    "travel": [
+      {
+        "name": "search_flights",
+        "description": "按日期与起降地查询航班。date 必须为 ISO 格式(YYYY-MM-DD)，机场必须为大写三字码。返回该航线上所有固定航班。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "date": { "type": "string", "description": "出发日期，ISO 格式如 2026-10-12" },
+            "from": { "type": "string", "description": "出发机场三字码，如 PEK" },
+            "to": { "type": "string", "description": "到达机场三字码，如 SHA" },
+            "class": { "type": "string", "enum": ["economy", "business"], "description": "可选，舱位筛选" }
+          },
+          "required": ["date", "from", "to"]
+        },
+        "permission": "none",
+        "read_only": true
+      },
+      {
+        "name": "get_user_profile",
+        "description": "查询用户资料（姓名、VIP、身份验证状态）。",
+        "parameters": {
+          "type": "object",
+          "properties": { "user_id": { "type": "string" } },
+          "required": ["user_id"]
+        },
+        "permission": "none",
+        "read_only": true
+      },
+      {
+        "name": "list_reservations",
+        "description": "列出某用户的全部预订（含预订号、航班、日期、状态）。",
+        "parameters": {
+          "type": "object",
+          "properties": { "user_id": { "type": "string" } },
+          "required": ["user_id"]
+        },
+        "permission": "none",
+        "read_only": true
+      },
+      {
+        "name": "verify_identity",
+        "description": "验证用户身份。验证码固定为 1234（演示环境）。验证成功前，退款类工具将被拒绝。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "user_id": { "type": "string" },
+            "code": { "type": "string", "description": "验证码，演示环境固定为 1234" }
+          },
+          "required": ["user_id", "code"]
+        },
+        "permission": "none",
+        "read_only": false
+      },
+      {
+        "name": "book_flight",
+        "description": "预订航班并创建预订记录。要求航班存在且有剩余座位。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "user_id": { "type": "string" },
+            "flight_id": { "type": "string" },
+            "class": { "type": "string", "enum": ["economy", "business"] },
+            "passenger_name": { "type": "string" }
+          },
+          "required": ["user_id", "flight_id", "class"]
+        },
+        "permission": "none",
+        "read_only": false
+      },
+      {
+        "name": "cancel_reservation",
+        "description": "取消预订（不改退款）。仅可取消本人未退款的已预订记录。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "user_id": { "type": "string" },
+            "reservation_id": { "type": "string" }
+          },
+          "required": ["user_id", "reservation_id"]
+        },
+        "permission": "none",
+        "read_only": false
+      },
+      {
+        "name": "refund_reservation",
+        "description": "对预订退款。要求：本人预订 + 已完成身份验证。退款后状态变为 refunded。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "user_id": { "type": "string" },
+            "reservation_id": { "type": "string" }
+          },
+          "required": ["user_id", "reservation_id"]
+        },
+        "permission": "requires_auth",
+        "read_only": false
+      }
+    ],
+    "shop": [
+      {
+        "name": "get_order_status",
+        "description": "查询订单状态。订单不存在时返回 not_found。",
+        "parameters": {
+          "type": "object",
+          "properties": { "order_id": { "type": "string" } },
+          "required": ["order_id"]
+        },
+        "permission": "none",
+        "read_only": true
+      },
+      {
+        "name": "list_orders",
+        "description": "列出某用户的全部订单（订单号、商品、金额、状态、下单日期）。",
+        "parameters": {
+          "type": "object",
+          "properties": { "user_id": { "type": "string" } },
+          "required": ["user_id"]
+        },
+        "permission": "none",
+        "read_only": true
+      },
+      {
+        "name": "update_address",
+        "description": "修改订单收货地址。仅 paid 状态订单可修改，shipped/delivered 订单拒绝。地址长度必须 ≥ 10 字符。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": { "type": "string" },
+            "new_address": { "type": "string" }
+          },
+          "required": ["order_id", "new_address"]
+        },
+        "permission": "none",
+        "read_only": false
+      },
+      {
+        "name": "verify_identity",
+        "description": "验证用户身份。验证码固定为 1234（演示环境）。退款前必须完成验证。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "user_id": { "type": "string" },
+            "code": { "type": "string", "description": "验证码，演示环境固定为 1234" }
+          },
+          "required": ["user_id", "code"]
+        },
+        "permission": "none",
+        "read_only": false
+      },
+      {
+        "name": "apply_refund",
+        "description": "申请退款。要求：订单属于当前已验证用户，且状态为 paid/shipped/delivered。他人订单返回权限错误。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": { "type": "string" },
+            "reason": { "type": "string" }
+          },
+          "required": ["order_id"]
+        },
+        "permission": "requires_auth",
+        "read_only": false
+      },
+      {
+        "name": "create_invoice",
+        "description": "为订单补开发票。要求订单状态为 paid/delivered。返回发票抬头与金额。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": { "type": "string" },
+            "title": { "type": "string", "description": "发票抬头" }
+          },
+          "required": ["order_id", "title"]
+        },
+        "permission": "none",
+        "read_only": false
+      }
+    ],
+    "analytics": [
+      {
+        "name": "get_schema",
+        "description": "查看数据表结构（表名与列名）。不传 table 时返回全部表。",
+        "parameters": {
+          "type": "object",
+          "properties": { "table": { "type": "string", "description": "可选，sales/products/regions" } },
+          "required": []
+        },
+        "permission": "none",
+        "read_only": true
+      },
+      {
+        "name": "run_query",
+        "description": "执行只读 SQL 查询。支持 SELECT/WHERE(AND)/GROUP BY/COUNT/SUM/BETWEEN。仅可查询 sales/products/regions 三张表。",
+        "parameters": {
+          "type": "object",
+          "properties": { "sql": { "type": "string" } },
+          "required": ["sql"]
+        },
+        "permission": "none",
+        "read_only": true
+      },
+      {
+        "name": "export_report",
+        "description": "将分析内容导出为报告（按标题存储）。返回 report_id。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "content": { "type": "string" }
+          },
+          "required": ["title", "content"]
+        },
+        "permission": "none",
+        "read_only": false
+      },
+      {
+        "name": "get_report",
+        "description": "按标题读取已导出的报告。",
+        "parameters": {
+          "type": "object",
+          "properties": { "report_id": { "type": "string" } },
+          "required": ["report_id"]
+        },
+        "permission": "none",
+        "read_only": true
+      },
+      {
+        "name": "list_reports",
+        "description": "列出全部已导出的报告。",
+        "parameters": { "type": "object", "properties": {}, "required": [] },
+        "permission": "none",
+        "read_only": true
+      }
+    ]
+  },
+  "fixtures": {
+    "travel_users": {
+      "u_42": { "name": "李雷", "vip": false, "verified": false },
+      "u_77": { "name": "韩梅梅", "vip": true, "verified": true }
+    },
+    "flights": {
+      "PEK-SHA": [
+        { "flight_id": "MU5101", "dep_time": "08:30", "arr_time": "10:10", "class": "economy", "price_cents": 98000, "seats_left": 5 },
+        { "flight_id": "MU5103", "dep_time": "09:45", "arr_time": "11:25", "class": "business", "price_cents": 145000, "seats_left": 3 },
+        { "flight_id": "MU5105", "dep_time": "13:20", "arr_time": "15:00", "class": "economy", "price_cents": 76000, "seats_left": 8 },
+        { "flight_id": "MU5107", "dep_time": "18:00", "arr_time": "19:40", "class": "economy", "price_cents": 69000, "seats_left": 10 }
+      ],
+      "SHA-PEK": [
+        { "flight_id": "MU5201", "dep_time": "08:00", "arr_time": "10:05", "class": "economy", "price_cents": 95000, "seats_left": 6 },
+        { "flight_id": "MU5203", "dep_time": "14:30", "arr_time": "16:35", "class": "economy", "price_cents": 88000, "seats_left": 7 }
+      ],
+      "SHA-CAN": [
+        { "flight_id": "CZ8801", "dep_time": "10:15", "arr_time": "12:30", "class": "economy", "price_cents": 82000, "seats_left": 4 },
+        { "flight_id": "CZ8803", "dep_time": "15:40", "arr_time": "17:55", "class": "economy", "price_cents": 54000, "seats_left": 9 }
+      ],
+      "CAN-SZX": [
+        { "flight_id": "ZH9101", "dep_time": "09:20", "arr_time": "10:05", "class": "economy", "price_cents": 31000, "seats_left": 6 }
+      ]
+    },
+    "travel_reservation_seed": {
+      "R_091": { "user_id": "u_42", "flight_id": "MU5201", "date": "2026-10-12", "class": "economy", "price_cents": 95000, "status": "booked" },
+      "R_092": { "user_id": "u_42", "flight_id": "ZH9101", "date": "2026-10-13", "class": "economy", "price_cents": 31000, "status": "booked" }
+    },
+    "shop_users": {
+      "u_42": { "name": "李雷", "verified": false },
+      "u_77": { "name": "韩梅梅", "verified": true }
+    },
+    "shop_orders": {
+      "O20261012001": { "user_id": "u_42", "item": "显示器", "amount_cents": 129900, "status": "paid", "address": "北京市海淀区中关村大街1号", "tracking": null, "invoice": null },
+      "O20261012002": { "user_id": "u_42", "item": "键盘", "amount_cents": 29900, "status": "shipped", "address": "北京市海淀区中关村大街1号", "tracking": "SF1234567890", "invoice": null },
+      "O20261005001": { "user_id": "u_42", "item": "鼠标", "amount_cents": 8900, "status": "delivered", "address": "北京市海淀区中关村大街1号", "tracking": "SF0987654321", "invoice": null },
+      "O20261008003": { "user_id": "u_42", "item": "手机壳", "amount_cents": 5900, "status": "paid", "address": "北京市海淀区中关村大街1号", "tracking": null, "invoice": null },
+      "O20260928001": { "user_id": "u_77", "item": "耳机", "amount_cents": 45900, "status": "paid", "address": "上海市静安区南京西路100号", "tracking": null, "invoice": null }
+    },
+    "products": {
+      "P1": { "name": "手机", "category": "数码" },
+      "P2": { "name": "耳机", "category": "数码" },
+      "P3": { "name": "充电器", "category": "配件" },
+      "P4": { "name": "平板", "category": "数码" }
+    },
+    "regions": {
+      "华北": { "manager": "张伟" },
+      "华东": { "manager": "李娜" },
+      "华南": { "manager": "王强" }
+    },
+    "sales": [
+      { "id": 1, "date": "2026-09-03", "product": "P1", "region": "华北", "channel": "线上", "amount_cents": 399900 },
+      { "id": 2, "date": "2026-09-05", "product": "P2", "region": "华东", "channel": "线上", "amount_cents": 129900 },
+      { "id": 3, "date": "2026-09-07", "product": "P1", "region": "华南", "channel": "线下", "amount_cents": 429900 },
+      { "id": 4, "date": "2026-09-10", "product": "P3", "region": "华北", "channel": "线下", "amount_cents": 8900 },
+      { "id": 5, "date": "2026-09-12", "product": "P2", "region": "华南", "channel": "线上", "amount_cents": 139900 },
+      { "id": 6, "date": "2026-09-15", "product": "P4", "region": "华东", "channel": "线上", "amount_cents": 259900 },
+      { "id": 7, "date": "2026-09-18", "product": "P1", "region": "华东", "channel": "线下", "amount_cents": 419900 },
+      { "id": 8, "date": "2026-09-21", "product": "P3", "region": "华南", "channel": "线上", "amount_cents": 9900 },
+      { "id": 9, "date": "2026-09-25", "product": "P4", "region": "华北", "channel": "线上", "amount_cents": 249900 },
+      { "id": 10, "date": "2026-09-28", "product": "P2", "region": "华北", "channel": "线下", "amount_cents": 119900 },
+      { "id": 11, "date": "2026-10-02", "product": "P1", "region": "华东", "channel": "线上", "amount_cents": 409900 },
+      { "id": 12, "date": "2026-10-05", "product": "P4", "region": "华南", "channel": "线下", "amount_cents": 269900 },
+      { "id": 13, "date": "2026-10-08", "product": "P3", "region": "华东", "channel": "线上", "amount_cents": 7900 },
+      { "id": 14, "date": "2026-10-10", "product": "P2", "region": "华南", "channel": "线上", "amount_cents": 129900 },
+      { "id": 15, "date": "2026-10-12", "product": "P1", "region": "华北", "channel": "线上", "amount_cents": 399900 }
+    ]
+  },
+  "key_aggregates_2026_09": {
+    "note": "9月数据人工核算结果，任务 verifier 以此为准",
+    "total_cents": 2168000,
+    "online_cents": 1189400,
+    "offline_cents": 978600,
+    "by_region_cents": { "华北": 778600, "华东": 809700, "华南": 579700 },
+    "product_p1_cents": 1249700,
+    "product_p1_count": 3,
+    "digital_category_cents": 2149200,
+    "south_p2_online_cents": 139900
+  }
+}

@@ -1,0 +1,265 @@
+{
+  "version": "v1.0",
+  "domain": "analytics",
+  "tasks": [
+    {
+      "task_id": "an_001",
+      "domain": "analytics",
+      "user_goal": "帮我统计 2026 年 9 月的总销售额（元）。",
+      "difficulty": "L1",
+      "design_note": "单表聚合 SUM，期望 21680 元",
+      "min_expected_turns": 1,
+      "max_steps": 6,
+      "initial_state": {},
+      "required_calls": [
+        { "tool": "run_query", "args_contain": { "sql": "sales" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "21680" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "run_query", "args": { "sql": "SELECT SUM(amount_cents) AS total FROM sales WHERE date >= '2026-09-01' AND date < '2026-10-01'" } }
+      ],
+      "gt_answer": "2026 年 9 月总销售额为 21680 元。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "聚合结果是否正确"
+    },
+    {
+      "task_id": "an_002",
+      "domain": "analytics",
+      "user_goal": "帮我统计 2026 年 9 月各区域的销售额，分别列出来。",
+      "difficulty": "L1",
+      "design_note": "分组聚合：华北 7786 / 华东 8097 / 华南 5797",
+      "min_expected_turns": 1,
+      "max_steps": 6,
+      "initial_state": {},
+      "required_calls": [
+        { "tool": "run_query", "args_contain": { "sql": "sales" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "7786" },
+        { "contains": "8097" },
+        { "contains": "5797" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "run_query", "args": { "sql": "SELECT region, SUM(amount_cents) AS total FROM sales WHERE date >= '2026-09-01' AND date < '2026-10-01' GROUP BY region" } }
+      ],
+      "gt_answer": "9 月各区域销售额：华北 7786 元，华东 8097 元，华南 5797 元。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "分组结果是否完整准确"
+    },
+    {
+      "task_id": "an_003",
+      "domain": "analytics",
+      "user_goal": "2026 年 9 月线上渠道的销售额是多少？",
+      "difficulty": "L1",
+      "design_note": "单条件过滤聚合，期望 11894 元",
+      "min_expected_turns": 1,
+      "max_steps": 6,
+      "initial_state": {},
+      "required_calls": [
+        { "tool": "run_query", "args_contain": { "sql": "sales" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "11894" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "run_query", "args": { "sql": "SELECT SUM(amount_cents) FROM sales WHERE channel = '线上' AND date >= '2026-09-01' AND date < '2026-10-01'" } }
+      ],
+      "gt_answer": "2026 年 9 月线上渠道销售额为 11894 元。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "过滤与聚合是否正确"
+    },
+    {
+      "task_id": "an_004",
+      "domain": "analytics",
+      "user_goal": "帮我统计 2026 年 9 月数码类产品的总销售额。",
+      "difficulty": "L2",
+      "design_note": "跨表信息依赖：必须先 get_schema 查 products 表获知类别字段，再 JOIN 统计；期望 21492 元",
+      "min_expected_turns": 2,
+      "max_steps": 10,
+      "initial_state": {},
+      "required_calls": [
+        { "tool": "get_schema", "args_contain": {} },
+        { "tool": "run_query", "args_contain": { "sql": "products" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "21492" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "get_schema", "args": {} },
+        { "tool": "run_query", "args": { "sql": "SELECT SUM(s.amount_cents) FROM sales s JOIN products p ON s.product = p.id WHERE p.category = '数码' AND s.date >= '2026-09-01' AND s.date < '2026-10-01'" } }
+      ],
+      "gt_answer": "2026 年 9 月数码类产品总销售额为 21492 元。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "是否先查 schema 再做跨表统计"
+    },
+    {
+      "task_id": "an_005",
+      "domain": "analytics",
+      "user_goal": "2026 年 9 月线上和线下哪个渠道卖得更好？各自多少？",
+      "difficulty": "L2",
+      "design_note": "分组对比：线上 11894 > 线下 9786，需给出两个数字并下结论",
+      "min_expected_turns": 1,
+      "max_steps": 8,
+      "initial_state": {},
+      "required_calls": [
+        { "tool": "run_query", "args_contain": { "sql": "sales" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "11894" },
+        { "contains": "9786" },
+        { "contains": "线上" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "run_query", "args": { "sql": "SELECT channel, SUM(amount_cents) AS total FROM sales WHERE date >= '2026-09-01' AND date < '2026-10-01' GROUP BY channel" } }
+      ],
+      "gt_answer": "9 月线上渠道销售额 11894 元，线下 9786 元，线上卖得更好。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "两个数字是否给出，结论是否正确"
+    },
+    {
+      "task_id": "an_006",
+      "domain": "analytics",
+      "user_goal": "2026 年 9 月手机一共卖了多少台？销售额多少？",
+      "difficulty": "L2",
+      "design_note": "跨表信息依赖：需先查 products 找到手机对应 P1，再 COUNT + SUM；期望 3 台 / 12497 元",
+      "min_expected_turns": 2,
+      "max_steps": 10,
+      "initial_state": {},
+      "required_calls": [
+        { "tool": "get_schema", "args_contain": {} },
+        { "tool": "run_query", "args_contain": { "sql": "sales" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "any_of": ["3台", "3 台"] },
+        { "contains": "12497" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "get_schema", "args": {} },
+        { "tool": "run_query", "args": { "sql": "SELECT COUNT(*), SUM(amount_cents) FROM sales WHERE product = 'P1' AND date >= '2026-09-01' AND date < '2026-10-01'" } }
+      ],
+      "gt_answer": "2026 年 9 月手机共售出 3 台，销售额 12497 元。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "数量与金额是否都正确"
+    },
+    {
+      "task_id": "an_007",
+      "domain": "analytics",
+      "user_goal": "帮我生成一份 2026 年 9 月的销售周报，报告标题必须为\"9月销售周报\"，内容要包含总销售额、各区域销售额、线上渠道占比，并导出为报告。",
+      "difficulty": "L3",
+      "design_note": "多跳任务：schema → 多次聚合查询(≥3) → 计算占比(线上 11894/21680≈54.9%) → export_report 固定标题",
+      "min_expected_turns": 4,
+      "max_steps": 14,
+      "initial_state": {},
+      "required_calls": [
+        { "tool": "get_schema", "args_contain": {} },
+        { "tool": "run_query", "args_contain": { "sql": "sales" } },
+        { "tool": "export_report", "args_contain": { "title": "9月销售周报" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [
+        { "path": "reports.9月销售周报", "exists": true }
+      ],
+      "answer_checks": [
+        { "any_of": ["已生成", "报告", "导出"] }
+      ],
+      "ground_truth_plan": [
+        { "tool": "get_schema", "args": {} },
+        { "tool": "run_query", "args": { "sql": "SELECT SUM(amount_cents) FROM sales WHERE date >= '2026-09-01' AND date < '2026-10-01'" } },
+        { "tool": "run_query", "args": { "sql": "SELECT region, SUM(amount_cents) FROM sales WHERE date >= '2026-09-01' AND date < '2026-10-01' GROUP BY region" } },
+        { "tool": "run_query", "args": { "sql": "SELECT channel, SUM(amount_cents) FROM sales WHERE date >= '2026-09-01' AND date < '2026-10-01' GROUP BY channel" } },
+        { "tool": "export_report", "args": { "title": "9月销售周报", "content": "总销售额 21680 元；华北 7786 元，华东 8097 元，华南 5797 元；线上占比约 54.9%。" } }
+      ],
+      "gt_answer": "已生成并导出报告\"9月销售周报\"，含总销售额 21680 元、各区域明细与线上渠道占比约 54.9%。",
+      "gt_final_state": { "reports": { "9月销售周报": { "title": "9月销售周报" } } },
+      "judge_rubric_hint": "报告标题、内容要素(总额/分区域/线上占比)是否齐全"
+    },
+    {
+      "task_id": "an_008",
+      "domain": "analytics",
+      "user_goal": "帮我查 2026 年 9 月华南区域线上渠道耳机的销售额，顺便看看库存还有多少。",
+      "difficulty": "L3",
+      "design_note": "干扰信息：库存不在任何表/工具中，正确行为是完成主查询(1399 元)并明确说明无法提供库存",
+      "min_expected_turns": 2,
+      "max_steps": 10,
+      "initial_state": {},
+      "required_calls": [
+        { "tool": "run_query", "args_contain": { "sql": "sales" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "1399" },
+        { "contains": "库存" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "get_schema", "args": {} },
+        { "tool": "run_query", "args": { "sql": "SELECT SUM(amount_cents) FROM sales WHERE region = '华南' AND channel = '线上' AND product = 'P2' AND date >= '2026-09-01' AND date < '2026-10-01'" } }
+      ],
+      "gt_answer": "2026 年 9 月华南区域线上渠道耳机销售额为 1399 元。系统中没有库存数据，无法提供库存信息。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "主查询是否正确，是否如实说明库存不可查"
+    },
+    {
+      "task_id": "an_009",
+      "domain": "analytics",
+      "user_goal": "帮我统计 9 月 1 日到 9 月 30 日这段时间的总销售额。",
+      "difficulty": "L2",
+      "design_note": "SQL 区间语义：日期范围必须含边界(>=9-01 且 <10-01)，漏边界会少算；期望 21680 元",
+      "min_expected_turns": 1,
+      "max_steps": 8,
+      "initial_state": {},
+      "required_calls": [
+        { "tool": "run_query", "args_contain": { "sql": "sales" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "21680" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "run_query", "args": { "sql": "SELECT SUM(amount_cents) FROM sales WHERE date BETWEEN '2026-09-01' AND '2026-09-30'" } }
+      ],
+      "gt_answer": "9 月 1 日至 9 月 30 日总销售额为 21680 元。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "日期边界是否包含完整"
+    },
+    {
+      "task_id": "an_010",
+      "domain": "analytics",
+      "user_goal": "2026 年 9 月线下渠道的销售额是多少？",
+      "difficulty": "L1",
+      "design_note": "单条件过滤聚合，期望 9786 元",
+      "min_expected_turns": 1,
+      "max_steps": 6,
+      "initial_state": {},
+      "required_calls": [
+        { "tool": "run_query", "args_contain": { "sql": "sales" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "9786" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "run_query", "args": { "sql": "SELECT SUM(amount_cents) FROM sales WHERE channel = '线下' AND date >= '2026-09-01' AND date < '2026-10-01'" } }
+      ],
+      "gt_answer": "2026 年 9 月线下渠道销售额为 9786 元。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "过滤与聚合是否正确"
+    }
+  ]
+}

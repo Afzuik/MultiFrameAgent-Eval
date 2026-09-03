@@ -1,0 +1,24 @@
+# 模型与端点配置（§6.7 / §13）。LiteLLM 走 openai 兼容端点。
+# 真实运行前请设置对应 api_key_env 环境变量（本机未设置时使用 --dry-run 模式）。
+models:
+  deepseek-v4-flash:
+    litellm_model: "openai/deepseek-v4-flash"
+    api_base: "https://api.deepseek.com"
+    api_key_env: "DEEPSEEK_API_KEY"
+    temperature: 0.2
+    max_tokens: 4096
+  qwen2.5-72b-instruct:
+    litellm_model: "openai/qwen2.5-72b-instruct"
+    api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "DASHSCOPE_API_KEY"
+    temperature: 0.2
+    max_tokens: 4096
+
+# 默认运行预算（§6.4；任务 schema 的 max_steps 可覆盖步数）
+default_budget:
+  max_steps: 12
+  timeout_s: 180
+  max_cost_usd: 0.05
+
+# mock 工具服务默认端口（§5）
+tool_server_port: 8200

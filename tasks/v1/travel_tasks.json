@@ -1,0 +1,465 @@
+{
+  "version": "v1.0",
+  "domain": "travel",
+  "tasks": [
+    {
+      "task_id": "tr_001",
+      "domain": "travel",
+      "user_goal": "帮我查一下 2026 年 10 月 12 日上午从北京(PEK)到上海(SHA)有哪些航班？",
+      "difficulty": "L1",
+      "design_note": "干扰过滤：查询结果含下午航班，答案必须只保留上午航班",
+      "min_expected_turns": 1,
+      "max_steps": 6,
+      "initial_state": { "user_id": "u_42" },
+      "required_calls": [
+        { "tool": "search_flights", "args_contain": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "MU5101" },
+        { "contains": "MU5103" },
+        { "not_contains": "MU5105" },
+        { "not_contains": "MU5107" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "search_flights", "args": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } }
+      ],
+      "gt_answer": "上午的航班有：MU5101（08:30 起飞，经济舱，980 元）和 MU5103（09:45 起飞，商务舱，1450 元）。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "是否准确过滤掉下午航班"
+    },
+    {
+      "task_id": "tr_002",
+      "domain": "travel",
+      "user_goal": "2026 年 10 月 12 日北京到上海最便宜的航班是哪一班？多少钱？",
+      "difficulty": "L1",
+      "design_note": "单工具 + 排序取最值",
+      "min_expected_turns": 1,
+      "max_steps": 6,
+      "initial_state": { "user_id": "u_42" },
+      "required_calls": [
+        { "tool": "search_flights", "args_contain": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "MU5107" },
+        { "contains": "690" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "search_flights", "args": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } }
+      ],
+      "gt_answer": "最便宜的是 MU5107，18:00 起飞，经济舱 690 元。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "是否正确取最小值"
+    },
+    {
+      "task_id": "tr_003",
+      "domain": "travel",
+      "user_goal": "帮我查一下我的账户信息，我叫什么名字，是不是 VIP？",
+      "difficulty": "L1",
+      "design_note": "单工具查询用户资料",
+      "min_expected_turns": 1,
+      "max_steps": 6,
+      "initial_state": { "user_id": "u_42" },
+      "required_calls": [
+        { "tool": "get_user_profile", "args_contain": { "user_id": "u_42" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "李雷" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "get_user_profile", "args": { "user_id": "u_42" } }
+      ],
+      "gt_answer": "您叫李雷，目前不是 VIP。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "信息是否准确传达"
+    },
+    {
+      "task_id": "tr_004",
+      "domain": "travel",
+      "user_goal": "帮我订 2026 年 10 月 12 日上午北京到上海的航班，预算 1200 元。如果上午的航班都超过预算，就改订当天最便宜的航班，并告诉我最终价格。",
+      "difficulty": "L2",
+      "design_note": "条件分支：贪心选最便宜会命中下午 MU5105（违反上午约束），不比较会订超预算 MU5103",
+      "min_expected_turns": 2,
+      "max_steps": 10,
+      "initial_state": { "user_id": "u_42" },
+      "required_calls": [
+        { "tool": "search_flights", "args_contain": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } },
+        { "tool": "book_flight", "args_contain": { "flight_id": "MU5101" } }
+      ],
+      "forbidden_calls": [
+        { "tool": "book_flight", "args_contain": { "flight_id": "MU5105" } }
+      ],
+      "final_state_checks": [
+        { "path": "reservations.u_42.R_MU5101_u_42.flight_id", "equals": "MU5101" },
+        { "path": "reservations.u_42.R_MU5101_u_42.status", "equals": "booked" }
+      ],
+      "answer_checks": [
+        { "contains": "980" },
+        { "not_contains": "MU5105" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "search_flights", "args": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } },
+        { "tool": "book_flight", "args": { "user_id": "u_42", "flight_id": "MU5101", "class": "economy" } }
+      ],
+      "gt_answer": "已为您预订上午的 MU5101（08:30 起飞，经济舱），价格 980 元，在预算内。",
+      "gt_final_state": {
+        "reservations": { "u_42": { "R_MU5101_u_42": { "flight_id": "MU5101", "status": "booked" } } }
+      },
+      "judge_rubric_hint": "是否比较价格并做出正确条件分支"
+    },
+    {
+      "task_id": "tr_005",
+      "domain": "travel",
+      "user_goal": "帮我订 2026 年 10 月 12 日北京到上海的航班，预算 650 元。如果全部超过预算，就订最便宜的并告诉我价格。",
+      "difficulty": "L2",
+      "design_note": "条件分支：全部超预算(最低 690)，必须切换到最便宜方案 MU5107；错误路径是直接放弃或订错航班",
+      "min_expected_turns": 2,
+      "max_steps": 10,
+      "initial_state": { "user_id": "u_42" },
+      "required_calls": [
+        { "tool": "search_flights", "args_contain": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } },
+        { "tool": "book_flight", "args_contain": { "flight_id": "MU5107" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [
+        { "path": "reservations.u_42.R_MU5107_u_42.status", "equals": "booked" }
+      ],
+      "answer_checks": [
+        { "contains": "690" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "search_flights", "args": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } },
+        { "tool": "book_flight", "args": { "user_id": "u_42", "flight_id": "MU5107", "class": "economy" } }
+      ],
+      "gt_answer": "全部航班都超过 650 元预算，已为您改订最便宜的 MU5107，价格 690 元。",
+      "gt_final_state": {
+        "reservations": { "u_42": { "R_MU5107_u_42": { "flight_id": "MU5107", "status": "booked" } } }
+      },
+      "judge_rubric_hint": "超预算时是否按规则切换到最便宜方案而非放弃"
+    },
+    {
+      "task_id": "tr_006",
+      "domain": "travel",
+      "user_goal": "帮我把上海回北京的那张机票取消掉。",
+      "difficulty": "L2",
+      "design_note": "信息检索 + 干扰：用户有两张票(SHA-PEK 与 CAN-SZX)，必须先 list 再只取消正确的一张",
+      "min_expected_turns": 2,
+      "max_steps": 10,
+      "initial_state": {
+        "user_id": "u_42",
+        "reservations": {
+          "u_42": {
+            "R_091": { "user_id": "u_42", "flight_id": "MU5201", "date": "2026-10-12", "class": "economy", "price_cents": 95000, "status": "booked" },
+            "R_092": { "user_id": "u_42", "flight_id": "ZH9101", "date": "2026-10-13", "class": "economy", "price_cents": 31000, "status": "booked" }
+          }
+        }
+      },
+      "required_calls": [
+        { "tool": "list_reservations", "args_contain": { "user_id": "u_42" } },
+        { "tool": "cancel_reservation", "args_contain": { "reservation_id": "R_091" } }
+      ],
+      "forbidden_calls": [
+        { "tool": "cancel_reservation", "args_contain": { "reservation_id": "R_092" } }
+      ],
+      "final_state_checks": [
+        { "path": "reservations.u_42.R_091.status", "equals": "cancelled" },
+        { "path": "reservations.u_42.R_092.status", "equals": "booked" }
+      ],
+      "answer_checks": [
+        { "any_of": ["已取消", "取消成功"] }
+      ],
+      "ground_truth_plan": [
+        { "tool": "list_reservations", "args": { "user_id": "u_42" } },
+        { "tool": "cancel_reservation", "args": { "user_id": "u_42", "reservation_id": "R_091" } }
+      ],
+      "gt_answer": "上海回北京的机票预订（R_091）取消成功。",
+      "gt_final_state": {
+        "reservations": {
+          "u_42": {
+            "R_091": { "status": "cancelled" },
+            "R_092": { "status": "booked" }
+          }
+        }
+      },
+      "judge_rubric_hint": "是否先检索再精准取消目标预订，未误伤其他预订"
+    },
+    {
+      "task_id": "tr_007",
+      "domain": "travel",
+      "user_goal": "帮我把上海回北京的那张机票退掉，钱原路退回。",
+      "difficulty": "L3",
+      "design_note": "检索 + 权限(退款前必须验证身份) + 状态流转；跳过验证直接退款会被工具拒绝",
+      "min_expected_turns": 3,
+      "max_steps": 14,
+      "initial_state": {
+        "user_id": "u_42",
+        "users": { "u_42": { "name": "李雷", "vip": false, "verified": false } },
+        "reservations": {
+          "u_42": {
+            "R_091": { "user_id": "u_42", "flight_id": "MU5201", "date": "2026-10-12", "class": "economy", "price_cents": 95000, "status": "booked" },
+            "R_092": { "user_id": "u_42", "flight_id": "ZH9101", "date": "2026-10-13", "class": "economy", "price_cents": 31000, "status": "booked" }
+          }
+        }
+      },
+      "required_calls": [
+        { "tool": "list_reservations", "args_contain": { "user_id": "u_42" } },
+        { "tool": "verify_identity", "args_contain": { "user_id": "u_42" } },
+        { "tool": "refund_reservation", "args_contain": { "reservation_id": "R_091" } }
+      ],
+      "forbidden_calls": [
+        { "tool": "refund_reservation", "args_contain": { "reservation_id": "R_092" } }
+      ],
+      "final_state_checks": [
+        { "path": "reservations.u_42.R_091.status", "equals": "refunded" },
+        { "path": "reservations.u_42.R_092.status", "equals": "booked" }
+      ],
+      "answer_checks": [
+        { "contains": "950" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "list_reservations", "args": { "user_id": "u_42" } },
+        { "tool": "verify_identity", "args": { "user_id": "u_42", "code": "1234" } },
+        { "tool": "refund_reservation", "args": { "user_id": "u_42", "reservation_id": "R_091" } }
+      ],
+      "gt_answer": "已完成身份验证并退款成功，950 元将原路退回。",
+      "gt_final_state": {
+        "reservations": {
+          "u_42": {
+            "R_091": { "status": "refunded" },
+            "R_092": { "status": "booked" }
+          }
+        }
+      },
+      "judge_rubric_hint": "是否按 检索→验证→退款 的正确顺序执行"
+    },
+    {
+      "task_id": "tr_008",
+      "domain": "travel",
+      "user_goal": "帮我查一下 10 月 12 号上午北京飞上海的航班。",
+      "difficulty": "L2",
+      "design_note": "参数格式：goal 用中文日期，工具要求 ISO 格式，必须转换后才能调用成功",
+      "min_expected_turns": 1,
+      "max_steps": 8,
+      "initial_state": { "user_id": "u_42" },
+      "required_calls": [
+        { "tool": "search_flights", "args_contain": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "MU5101" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "search_flights", "args": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } }
+      ],
+      "gt_answer": "上午的航班有 MU5101（08:30 起飞，980 元）和 MU5103（09:45 起飞，1450 元）。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "是否正确转换日期格式后查询"
+    },
+    {
+      "task_id": "tr_009",
+      "domain": "travel",
+      "user_goal": "帮我订 2026 年 10 月 12 日早上 8 点半北京到上海的 MU5101，再帮我订当天上午 10 点后上海到广州的航班，商务舱优先，没有商务舱就订经济舱，并告诉我总价。",
+      "difficulty": "L3",
+      "design_note": "多段行程 + 条件降级(SHA-CAN 无商务舱，必须降级订经济舱 CZ8801)；错误路径是坚持商务舱导致失败",
+      "min_expected_turns": 3,
+      "max_steps": 14,
+      "initial_state": { "user_id": "u_42" },
+      "required_calls": [
+        { "tool": "search_flights", "args_contain": { "from": "SHA", "to": "CAN" } },
+        { "tool": "book_flight", "args_contain": { "flight_id": "MU5101" } },
+        { "tool": "book_flight", "args_contain": { "flight_id": "CZ8801" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [
+        { "path": "reservations.u_42.R_MU5101_u_42.status", "equals": "booked" },
+        { "path": "reservations.u_42.R_CZ8801_u_42.status", "equals": "booked" }
+      ],
+      "answer_checks": [
+        { "contains": "980" },
+        { "contains": "820" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "search_flights", "args": { "date": "2026-10-12", "from": "SHA", "to": "CAN" } },
+        { "tool": "book_flight", "args": { "user_id": "u_42", "flight_id": "MU5101", "class": "economy" } },
+        { "tool": "book_flight", "args": { "user_id": "u_42", "flight_id": "CZ8801", "class": "economy" } }
+      ],
+      "gt_answer": "已预订 MU5101（980 元）与 CZ8801（820 元，经济舱），总价 1800 元。",
+      "gt_final_state": {
+        "reservations": {
+          "u_42": {
+            "R_MU5101_u_42": { "status": "booked" },
+            "R_CZ8801_u_42": { "status": "booked" }
+          }
+        }
+      },
+      "judge_rubric_hint": "多段行程是否全部完成，商务舱缺失时是否合理降级"
+    },
+    {
+      "task_id": "tr_010",
+      "domain": "travel",
+      "user_goal": "帮我看下 2026 年 10 月 12 日上海到广州都有哪些航班？",
+      "difficulty": "L1",
+      "design_note": "单工具查询",
+      "min_expected_turns": 1,
+      "max_steps": 6,
+      "initial_state": { "user_id": "u_42" },
+      "required_calls": [
+        { "tool": "search_flights", "args_contain": { "date": "2026-10-12", "from": "SHA", "to": "CAN" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "CZ8801" },
+        { "contains": "CZ8803" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "search_flights", "args": { "date": "2026-10-12", "from": "SHA", "to": "CAN" } }
+      ],
+      "gt_answer": "有 CZ8801（10:15 起飞，820 元）和 CZ8803（15:40 起飞，540 元）。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "信息是否完整"
+    },
+    {
+      "task_id": "tr_011",
+      "domain": "travel",
+      "user_goal": "帮我确认一下我的账户身份。",
+      "difficulty": "L1",
+      "design_note": "单工具：身份验证",
+      "min_expected_turns": 1,
+      "max_steps": 6,
+      "initial_state": {
+        "user_id": "u_42",
+        "users": { "u_42": { "name": "李雷", "vip": false, "verified": false } }
+      },
+      "required_calls": [
+        { "tool": "verify_identity", "args_contain": { "user_id": "u_42" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [
+        { "path": "users.u_42.verified", "equals": true }
+      ],
+      "answer_checks": [
+        { "any_of": ["成功", "已完成"] }
+      ],
+      "ground_truth_plan": [
+        { "tool": "verify_identity", "args": { "user_id": "u_42", "code": "1234" } }
+      ],
+      "gt_answer": "身份验证成功。",
+      "gt_final_state": { "users": { "u_42": { "verified": true } } },
+      "judge_rubric_hint": "是否完成验证并告知结果"
+    },
+    {
+      "task_id": "tr_012",
+      "domain": "travel",
+      "user_goal": "帮我订 2026 年 10 月 12 日下午北京到上海最便宜的经济舱航班。",
+      "difficulty": "L2",
+      "design_note": "时段过滤 + 类目过滤 + 排序：正确解是 MU5107(690)；错误路径是忽略时段订上午 MU5101 或忽略舱位订商务舱",
+      "min_expected_turns": 2,
+      "max_steps": 10,
+      "initial_state": { "user_id": "u_42" },
+      "required_calls": [
+        { "tool": "search_flights", "args_contain": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } },
+        { "tool": "book_flight", "args_contain": { "flight_id": "MU5107" } }
+      ],
+      "forbidden_calls": [
+        { "tool": "book_flight", "args_contain": { "flight_id": "MU5101" } }
+      ],
+      "final_state_checks": [
+        { "path": "reservations.u_42.R_MU5107_u_42.status", "equals": "booked" }
+      ],
+      "answer_checks": [
+        { "contains": "690" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "search_flights", "args": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } },
+        { "tool": "book_flight", "args": { "user_id": "u_42", "flight_id": "MU5107", "class": "economy" } }
+      ],
+      "gt_answer": "已为您预订下午最便宜的经济舱 MU5107，价格 690 元。",
+      "gt_final_state": {
+        "reservations": { "u_42": { "R_MU5107_u_42": { "flight_id": "MU5107", "status": "booked" } } }
+      },
+      "judge_rubric_hint": "时段与舱位两个过滤条件是否同时满足"
+    },
+    {
+      "task_id": "tr_013",
+      "domain": "travel",
+      "user_goal": "我忘了订单号了，帮我把回北京方向的那张票退掉，钱退回来。",
+      "difficulty": "L3",
+      "design_note": "隐式需求(先检索订单号) + 干扰(两张票) + 权限(需验证身份) + 状态流转，四维度叠加",
+      "min_expected_turns": 4,
+      "max_steps": 14,
+      "initial_state": {
+        "user_id": "u_42",
+        "users": { "u_42": { "name": "李雷", "vip": false, "verified": false } },
+        "reservations": {
+          "u_42": {
+            "R_091": { "user_id": "u_42", "flight_id": "MU5201", "date": "2026-10-12", "class": "economy", "price_cents": 95000, "status": "booked" },
+            "R_092": { "user_id": "u_42", "flight_id": "ZH9101", "date": "2026-10-13", "class": "economy", "price_cents": 31000, "status": "booked" }
+          }
+        }
+      },
+      "required_calls": [
+        { "tool": "list_reservations", "args_contain": { "user_id": "u_42" } },
+        { "tool": "verify_identity", "args_contain": { "user_id": "u_42" } },
+        { "tool": "refund_reservation", "args_contain": { "reservation_id": "R_091" } }
+      ],
+      "forbidden_calls": [
+        { "tool": "refund_reservation", "args_contain": { "reservation_id": "R_092" } }
+      ],
+      "final_state_checks": [
+        { "path": "reservations.u_42.R_091.status", "equals": "refunded" },
+        { "path": "reservations.u_42.R_092.status", "equals": "booked" }
+      ],
+      "answer_checks": [
+        { "contains": "950" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "list_reservations", "args": { "user_id": "u_42" } },
+        { "tool": "verify_identity", "args": { "user_id": "u_42", "code": "1234" } },
+        { "tool": "refund_reservation", "args": { "user_id": "u_42", "reservation_id": "R_091" } }
+      ],
+      "gt_answer": "已定位回北京的机票预订（R_091），身份验证后退款成功，950 元原路退回。",
+      "gt_final_state": {
+        "reservations": {
+          "u_42": {
+            "R_091": { "status": "refunded" },
+            "R_092": { "status": "booked" }
+          }
+        }
+      },
+      "judge_rubric_hint": "隐式检索、权限验证、状态流转是否全部完成且无误伤"
+    },
+    {
+      "task_id": "tr_014",
+      "domain": "travel",
+      "user_goal": "帮我查一下 2026 年 10 月 12 日下午北京到上海最便宜的经济舱是哪一班？多少钱？",
+      "difficulty": "L1",
+      "design_note": "查询类：时段过滤 + 舱位过滤 + 排序，但不产生状态变更",
+      "min_expected_turns": 1,
+      "max_steps": 6,
+      "initial_state": { "user_id": "u_42" },
+      "required_calls": [
+        { "tool": "search_flights", "args_contain": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } }
+      ],
+      "forbidden_calls": [],
+      "final_state_checks": [],
+      "answer_checks": [
+        { "contains": "MU5107" },
+        { "contains": "690" },
+        { "not_contains": "MU5103" }
+      ],
+      "ground_truth_plan": [
+        { "tool": "search_flights", "args": { "date": "2026-10-12", "from": "PEK", "to": "SHA" } }
+      ],
+      "gt_answer": "下午最便宜的经济舱是 MU5107，18:00 起飞，690 元。",
+      "gt_final_state": {},
+      "judge_rubric_hint": "过滤条件是否齐全"
+    }
+  ]
+}
