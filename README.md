@@ -48,15 +48,15 @@ EVAL_DRY_RUN=1 .venv/bin/python -m harness.orchestrator \
 
 断点续跑：重跑同一 group 会自动跳过已完成任务（按 task_id）；中断后直接重跑即可。
 
-## 项目状态（W3 ✅）
+## 项目状态（W4 ✅）
 
-- [x] W1/W2 全部（任务集 / mock 服务 / 三框架适配器 / 编排器 / F1 / 失败分类 / 真实实验）
-- [x] v1.1 修正：verifier 数字归一化匹配、措辞宽松、工具描述补全、校验清单新项、smolagents 步数 ×1.5
-- [x] OpenHands 适配器：§6.5 时间盒如实落地方案 C（SDK 新架构 + 无 Docker，W4 回归补 A），fake_llm + CLI 契约 + 6 测试
-- [x] LLM-as-judge：rubric 1~5 + 双 judge + 一致性 + 轨迹压缩匿名化 + 兜底（13 测试）；真实运行 R1 mean 4.38 / agreement 92.5%
-- [x] analysis/report.py：6 章节 markdown 报告生成器（6 测试）
-- [x] 实验矩阵 6 组（R1/R2/S1/S2/O1/O2）；O1 dry-run 40/40
-- [ ] W4：dashboard、失败案例深挖、judge 锚定、方案 A 回归、R2/S2/O 组真实实验（需 qwen key）
+- [x] W1~W3 全部（任务集 / mock 服务 / 三框架适配器 / 编排器 / F1 / 失败分类 / judge / 报告生成 / 6 组实验）
+- [x] v1.1/v1.2 评测器修正（数字归一化、措辞宽松、空白归一化、端点抖动检测）
+- [x] Streamlit dashboard：总览 / 轨迹回放 / 失败分析三页（`streamlit run dashboard/app.py`）
+- [x] 最终实验报告 `docs/REPORT_FINAL.md` + 6 例轨迹案例研究 `docs/CASESTUDY.md`
+- [x] judge 全 5 组评分（R1 4.39 / S1 4.34 / R2 4.72 / S2 4.34 / O2 4.45）
+- [x] MIT LICENSE + 30 分钟复现指南；全仓 268 测试全绿
+- [ ] 后续可选：OpenHands 方案 A 回归、judge 人工锚定、GitHub push、样例数据
 
 ## 文档
 
