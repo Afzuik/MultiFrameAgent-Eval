@@ -239,6 +239,9 @@ def _run_one_task(
     trace_path = run_dir / "traces" / f"{task_id}.jsonl"
 
     # 3) 子进程驱动适配器（超时强杀 → 按 timeout 计）
+    # 2026-09 教训：不依赖 proc.communicate(timeout=...) —— 某次真实实验中
+    # 适配器主线程死锁（interrupt 等锁），communicate 的超时未按预期触发，
+    # 单个任务拖了 82 分钟。改用显式墙钟轮询 + SIGKILL，保证必然强杀。
     proc = subprocess.Popen(
         [sys.executable, "-m", adapter_module, "--spec", str(spec_path),
          "--out", str(trace_path)],
@@ -246,12 +249,14 @@ def _run_one_task(
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     timeout_hit = False
-    try:
-        _, _ = proc.communicate(timeout=budget.timeout_s + SERVER_GRACE_S)
-    except subprocess.TimeoutExpired:
+    deadline = time.time() + budget.timeout_s + SERVER_GRACE_S
+    while proc.poll() is None and time.time() < deadline:
+        time.sleep(0.5)
+    if proc.poll() is None:
         proc.kill()
-        proc.communicate()
         timeout_hit = True
+    # 收割并清空管道（kill 后立即返回；正常运行输出量小不会撑爆管道缓冲）
+    proc.communicate()
 
     # 4) 读轨迹（缺失 → 构造空 Trace 记 error）
     trace = protocol.load_trace(trace_path)

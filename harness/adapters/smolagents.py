@@ -28,7 +28,6 @@ import keyword
 import os
 import threading
 import time
-from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -202,6 +201,9 @@ def _make_model(spec: dict) -> Model:
         "api_base": spec.get("api_base") or None,
         "api_key": api_key or None,
         "temperature": params.get("temperature", 0.2),
+        # 客户端超时（2026-09 真实实验：MiMo 端点单次调用挂起 82 分钟，
+        # 拖死整任务——litellm 无默认超时，必须显式给；经 self.kwargs 转发）
+        "timeout": float(params.get("api_timeout_s", 120)),
     }
     max_tokens = params.get("max_completion_tokens") or params.get("max_tokens")
     if max_tokens is not None:
@@ -337,10 +339,12 @@ def _run_real(trace: Trace, spec: dict, budget: RunBudget,
     thread.join(timeout=remaining)
 
     if thread.is_alive():
-        # 超时：请求中断当前 agent 循环（线程无法强杀，进程退出后即回收）
+        # 超时：直接判定并退出。**不调用 agent.interrupt()**——2026-09 真实实验
+        # 证明 worker 卡在模型调用时 interrupt() 会阻塞等待 worker 持有的锁，
+        # 造成主线程死锁、进程永不退出（an_010 挂起 82 分钟）。
+        # worker 是 daemon 线程，随进程退出回收；客户端超时（_make_model 注入
+        # timeout=120s）保证 worker 迟早返回，不会无限占用。
         trace.status = STATUS_TIMEOUT
-        with suppress(Exception):  # interrupt 失败不影响超时结论
-            agent.interrupt()
         return EXIT_BUDGET
     if "exc" in box:
         raise box["exc"] from None
