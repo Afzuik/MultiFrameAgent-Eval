@@ -256,17 +256,14 @@ def test_tool_error_backfilled_as_tool_message(tmp_path, monkeypatch):
     obs = [s for s in trace.steps if s.type == "observation"]
     assert obs and obs[0].content == error_body
 
-    # 第二次调用时模型已收到标准 tool 消息（带 tool_call_id 指向同一内容）
+    # 第二次调用时模型收到 assistant 原样输出 + user 消息携带工具结果
+    # （DeepSeek 推理模型兼容回填口径：不合成 tool_calls/tool 消息）
     second = seen_messages[1]
-    tool_msgs = [m for m in second if m.get("role") == "tool"]
-    assert len(tool_msgs) == 1
-    assert tool_msgs[0]["content"] == error_body
-    call_id = tool_msgs[0]["tool_call_id"]
+    assert not any(m.get("role") == "tool" for m in second)
+    user_msgs = [m for m in second if m.get("role") == "user"]
+    assert any(f"工具返回: {error_body}" in str(m.get("content")) for m in user_msgs)
     assistant_msgs = [m for m in second if m.get("role") == "assistant"]
-    assert any(
-        tc.get("id") == call_id
-        for m in assistant_msgs for tc in m.get("tool_calls", [])
-    )
+    assert any(m.get("content") == scripted[0] for m in assistant_msgs)
 
 
 # --------------------------------------------------------------------------

@@ -15,10 +15,12 @@ models:
     max_tokens: 4096
 
 # 默认运行预算（§6.4；任务 schema 的 max_steps 可覆盖步数）
+# 注：deepseek-v4-flash 为推理模型（含思考 token），耗时与 token 消耗均高于
+# 非推理模型，故 W2 真实实验把超时/成本上限适度上调（原默认 180s / $0.05）。
 default_budget:
   max_steps: 12
-  timeout_s: 180
-  max_cost_usd: 0.05
+  timeout_s: 300
+  max_cost_usd: 0.2
 
 # mock 工具服务默认端口（§5）
 tool_server_port: 8200

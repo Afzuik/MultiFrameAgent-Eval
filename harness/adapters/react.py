@@ -277,25 +277,15 @@ def _run_loop(trace: Trace, spec: dict, budget: RunBudget,
         result_text = _invoke_tool(spec, tool_name, tool_args)
         _record(trace, "observation", "tool", content=result_text)
         if not fake:
-            # 标准 OpenAI tool 消息格式回填：assistant 带 tool_calls，
-            # 下一条 role="tool" 用同一 tool_call_id 指向返回结果。
-            call_id = f"react_call_{turns:04d}"
-            canonical = json.dumps({"tool": tool_name, "args": tool_args},
-                                   ensure_ascii=False)
+            # 回填策略（对 DeepSeek 推理模型兼容）：assistant 原样输出 +
+            # user 消息携带工具结果。不合成 tool_calls/tool 消息——
+            # api.deepseek.com 思考模式要求 tool_calls 消息回传 reasoning_content，
+            # 合成消息无法满足该要求（2026-09 真实实验冒烟结论）。
+            messages.append({"role": "assistant", "content": raw})
             messages.append({
-                "role": "assistant",
-                "content": canonical,
-                "tool_calls": [{
-                    "id": call_id,
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "arguments": json.dumps(tool_args, ensure_ascii=False),
-                    },
-                }],
+                "role": "user",
+                "content": f"工具返回: {result_text}",
             })
-            messages.append({"role": "tool", "tool_call_id": call_id,
-                             "content": result_text})
 
 
 def run_from_spec(spec: dict, out_path: Path) -> int:
