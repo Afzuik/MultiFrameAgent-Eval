@@ -1,0 +1,173 @@
+# AgentEval 最终实验报告（W4）
+
+> 项目：轻量、可复现、多框架横向对比的 LLM Agent 评测体系（40 任务 × 3 框架 × 2 backbone）
+> 报告日期：2026-09-04 ｜ 任务集 v1.0 冻结（实验中未改任务与 verifier）
+>
+> **数据口径与来源**（本报告所有数字以 `runs/` 下 json 为权威，逐个可回溯）：
+> - 主表/分难度/失败分布：`runs/2026-09-03_{R1,S1,R2,S2,O2}/summary.json`、`failure_modes.json`
+> - R1/S1 复评口径：`runs/2026-09-03_{R1,S1}/reevaluation_v11.json`（离线复评，analysis/reevaluate）
+> - R1/S1 token：`docs/EXPERIMENT_W2.md`；MiMo 消融叙述：`docs/EXPERIMENT_MIMO.md`
+> - judge 质量：`runs/2026-09-03_{R1,S1}/judge_scores.json`
+> - dry-run 基线：`runs/2026-09-03_{R1,S1}_dryrun/summary.json`
+> - 结构按《项目方案.md》§9.3 六章 + W4 附加章节（§7~§10）
+
+---
+
+## 1. 主表（6 组全景 + dry-run 基线）
+
+每组 40 任务（travel/shop/analytics 三域 × L1/L2/L3，各 15/15/10 个）。R1/S1 主表口径为 **v1.1 离线复评口径**（原始 v1.0 自动口径见括号与脚注）；R2/S2/O2 在 v1.1 verifier 修正后直接运行。所有真实组 `cost_usd = 0`（计费未配置，见 §9 局限）。
+
+| 组 | 框架 | 模型 | SR | mean F1 (Recall/Precision) | 平均耗时 (s) | 平均工具调用 | 失败数 | judge 轨迹分 |
+|---|---|---|---|---|---|---|---|---|
+| R1 | react | deepseek-v4-flash | **0.975** †（原 0.75，30/40） | 0.7733 (0.7508/**1.0**) | 10.202 | **2.4** | 10 → 复评后 1 | 4.39 |
+| S1 | smolagents | deepseek-v4-flash | **0.95** †（原 0.90，36/40） | 0.7867 (0.7592/**1.0**) | 20.492 | 8.525 | 4 → 复评后 2 | 4.34 |
+| R2 | react | mimo-v2.5-pro | **0.95** | 0.7833 (0.7675/**1.0**) | 37.735 | 2.375 | 2 | judge 未运行 |
+| S2 | smolagents | mimo-v2.5-pro | **0.90** | 0.7983 (0.7758/**1.0**) | 63.454 | 3.2 | 4 | judge 未运行 |
+| O2 | openhands（方案 C） | mimo-v2.5-pro | **0.85** | 0.7283 (0.7092/**1.0**) | 29.672 | 2.675 | 6 | judge 未运行 |
+| O1 | openhands | deepseek-v4-flash | —（**未跑真实**：方案 C 等价循环，待 W4 方案 A） | — | — | — | — | — |
+| R1-dry | react | fake_llm（GT 回放） | 1.0 | 1.0 (1.0/1.0) | 0.017 | 1.7 | 0 | — |
+| S1-dry | smolagents | fake_llm（GT 回放） | 1.0 | 1.0 (1.0/1.0) | 0.020 | 1.7 | 0 | — |
+
+脚注：
+
+- † R1/S1 为 v1.1 离线复评口径（`reevaluation_v11.json`：R1 30→39/40 = 0.975、S1 36→38/40 = 0.95）。复评修正的 11 个失败（R1 9 + S1 2）均为 v1.0 verifier 假阴性（措辞过严/数字格式过严，见 §8），非模型能力变化；扣除后 react 与 smolagents 的真实能力几乎打平（39/40 vs 38/40）。
+- O1 对应 §9.1 矩阵"openhands × deepseek"，W3 仅以方案 C（openhands 适配器 = react 等价循环）验证链路（README 记录其 dry-run 40/40，未落 summary.json）；真实 OpenHands（方案 A）接入后排期 W4 补跑。
+- dry-run（fake_llm 回放 GT 路径）是链路与评测器自检基线（`runs/..._dryrun/summary.json` 均 40/40 PASS、F1 = 1.0），证明编排器/verifier/适配器全链路正确，不构成能力度量。
+- Precision 五组真实数据恒 1.0：从未产生非法工具调用或畸形参数。
+
+---
+
+## 2. 分难度 SR（以 summary.json `by_difficulty` 为准）
+
+| 组 | L1（15） | L2（15） | L3（10） |
+|---|---|---|---|
+| R1 | 0.7333 | 0.6 | 1.0 |
+| S1 | 0.9333 | 0.8 | 1.0 |
+| R2 | 0.9333 | 0.9333 | 1.0 |
+| S2 | 0.8667 | 0.9333 | 0.9 |
+| O2 | 1.0 | 0.8 | **0.7** |
+| R1-dry / S1-dry | 1.0 | 1.0 | 1.0 |
+
+注：R1/S1 分难度为**原始 v1.0 口径**——v1.1 复评只重判了答案维度、未按难度重算（修正主要影响 analytics 域 L1/L2，见 `reevaluation_v11.json` 逐任务校正）。观察要点：deepseek 两组 L3 全满分、MiMo 的 S2/O2 在 L3 跌至 0.90/0.70——**难档任务的差距由模型主导而非框架**。
+
+---
+
+## 3. 失败模式分布
+
+### 3.1 by_category 自动聚类汇总（以 `failure_modes.json` 为准，五组真实数据）
+
+| 类别（§10.1 六类） | R1 | S1 | R2 | S2 | O2 | 合计 |
+|---|---|---|---|---|---|---|
+| permission_violation（权限/规则违反） | 0 | 0 | 0 | 0 | 2 | 2 |
+| parse_failure（解析失败） | 0 | 0 | 0 | 0 | 2 | 2 |
+| budget_exhausted（预算耗尽） | 0 | 1 | 0 | 0 | 0 | 1 |
+| tool_selection_error（工具选择错误） | 0 | 0 | 0 | 0 | 0 | 0 |
+| arg_error（参数错误） | 0 | 1 | 0 | 1 | 0 | 2 |
+| planning_failure（规划失败·兜底） | 10 | 2 | 2 | 3 | 2 | 19 |
+| **合计（失败数）** | **10** | **4** | **2** | **4** | **6** | **26** |
+
+（自动聚类来自 `analysis/failure_modes.py`；`planning_failure` 为未命中更细分类时的兜底桶，其中 R1/S1 的 12 例主要对应 v1.1 口径下的 verifier 假阴性（11 例复评转 PASS + R1 sh_002 描述缺口），逐例见 3.2 与归因综述。）
+
+### 3.2 关键案例一句话归因
+
+| 任务（组） | 一句话归因 |
+|---|---|
+| tr_001（R2/S2 两组失败，O2 通过） | MiMo **答案过滤不彻底**（react/smolagents 下）：列出符合条件的上午航班后又提及下午航班（`answer_forbidden:MU5105/MU5107` 命中）——系统性模型级弱点，与框架无关 |
+| sh_013（O2，L3） | **权限违规**：对状态 delivered 的订单调用 `apply_refund`（`forbidden_call` 命中、终态被改成 refunding）——全实验唯一 forbidden_call 命中，首例越权 |
+| sh_003（S2，L2） | **空白差异假阴性**：终态地址 "88号" vs 期望 "88 号"（`state_mismatch`）——v1.2 final_state_checks 空白归一化修复即可恢复（尚未复评，不虚构数字，见 §9） |
+| tr_006 / sh_014 / an_001、an_003~006、an_009、an_010（R1/S1） | v1.0 措辞/数字假阴性（"已为您取消"查"已取消"、千分位 "21,680" 查 "21680"）——v1.1 复评 11 例全部转 PASS（R1 9 + S1 2） |
+| sh_002（R1/S2） | 工具描述缺口：`get_order_status` 描述未声明返回物流单号 → R1 直接放弃、S2 调用了工具但未报告单号 |
+| an_004（S1，L2） | 预算耗尽（`budget_exceeded`）：smolagents CodeAgent 步数内跑不完跨表 JOIN——真实能力边界，非 verifier 问题 |
+| tr_012（S1，L2） | 真实能力失败：订错航班（`book_flight` 未发生 + 状态机/答案不符） |
+| tr_008 / tr_013（O2） | 自动聚类归 parse_failure，人工归因为真实失败：未发生 `search_flights` / 未发生 `refund_reservation`（终态停在 booked） |
+| sh_004（R2/O2）、sh_006（O2） | 未先调用 `get_order_status` 查询即答复"无法/不支持/不能修改/无权"（sh_006 因而被自动归入 permission_violation，但非 forbidden_call） |
+
+归因综述（自动聚类 + 人工归因，以 EXPERIMENT_W2 §3 / EXPERIMENT_MIMO §4 为准）：26 例中，R1/S1 的 11 例经 v1.1 复评确认转 PASS（纯 verifier 假阴性）；工具描述缺口 2 例（R1/S2 sh_002，其中 R1 例复评后仍失败）；S2 sh_003 为 v1.2 空白类假阴性（未复评）；真实模型失败以 MiMo 为主——人工归因 9 例（tr_001×2、tr_007、sh_006、sh_013、tr_013、tr_008、sh_004）——加上 S1 的 tr_012（订错航班）与 an_004（预算耗尽）；O2 sh_011（answer_missing:1299）等个别案例是否含 verifier 残余假阴性待逐例复核（见 §9 局限 4）。
+
+---
+
+## 4. 成本效率
+
+### 4.1 耗时 × 工具调用（summary.json）
+
+| 组 | SR | 平均耗时 (s) | 平均工具调用 | 极端案例 |
+|---|---|---|---|---|
+| R1 | 0.975 † | **10.202** | **2.4** | — |
+| S1 | 0.95 † | 20.492 | 8.525 | tr_013 一次退款路径 204 次工具调用（EXPERIMENT_W2 §4） |
+| R2 | 0.95 | 37.735 | 2.375 | — |
+| S2 | 0.90 | 63.454 | 3.2 | — |
+| O2 | 0.85 | 29.672 | 2.675 | — |
+| dry-run | 1.0 | ~0.02 | 1.7 | — |
+
+**一句话性价比结论**：react × deepseek 是全实验性价比最优组合——10.2s/2.4 次调用即达到复评口径 0.975，而 smolagents × deepseek 同一档 SR 需 2.0 倍耗时、3.55 倍工具调用、约 4.7 倍 token（695,169 vs 147,064）；MiMo 系 R2/S2 的平均耗时达到同框架 deepseek 组的 3.7/3.1 倍（37.7s / 63.5s），SR 却不升反降——无论 backbone，"react 精简"在性价比上稳健成立。
+
+### 4.2 token 消耗（成本代理）
+
+| 组 | 总输入 tokens | 总输出 tokens（含 reasoning） | 平均 /task in / out |
+|---|---|---|---|
+| R1 | 147,064 | 43,466 | 3,677 / 1,087 |
+| S1 | 695,169 | 80,779 | 17,379 / 2,019 |
+| R2 / S2 / O2 | 未统计 | 未统计 | 未统计 |
+
+（R1/S1 来自 `docs/EXPERIMENT_W2.md` §5；MiMo 各组文档未记录 token、`results.csv` 亦无 usage 列，故标"未统计"不作推算。smolagents 的 CodeAgent 系统提示 + 多步代码生成致 token 消耗约为 react 的 4.7 倍。）
+
+---
+
+## 5. 案例研究（占位）
+
+逐轨迹逐步分析（每框架成功 1 例 + 失败 1 例）由**另一 agent 并行撰写**，见 **`docs/CASESTUDY.md`**（本报告不重复内容）。
+
+建议选例锚点（与本报告数字一致）：R1 tr_006（复评转 PASS 的措辞假阴性）、S1 an_004（预算耗尽）与 S1 tr_013（204 次调用成功）、S2 sh_003（空白假阴性）、O2 sh_013（权限违规，全实验唯一 forbidden_call）。
+
+---
+
+## 6. judge 质量报告（`judge_scores.json`）
+
+Rubric 1~5 双 judge 独立评分（匿名化压缩轨迹 + 失败兜底回退 verifier 硬指标，§8.3）。**主表使用双 judge 均值**。
+
+| 组 | agreement_exact（完全一致） | agreement_pm1（±1 分内） | 双 judge 均值（mean_score） | n_fallback（兜底次数） |
+|---|---|---|---|---|
+| R1 | **0.925**（≈92.5%） | **0.975**（≈97.5%） | 4.39 | 5 |
+| S1 | **0.875**（≈87.5%） | **0.95**（≈95%） | 4.34 | 11 |
+| R2 / S2 / O2 | judge 未运行（待补） | judge 未运行（待补） | — | — |
+
+- 人工锚定（§8.3.4：随机抽 10 条人工打分作为 judge 质量参照）：**W4 待做**（README W4 待办「judge 锚定」）。
+- ±1 内一致率两组均 ≥ 95%，仅个别任务分歧超过 1 分（如 R1 an_004 的 1 vs 4、S1 tr_006 的 3 vs 5），judge 输出整体稳定。
+- n_fallback 为 §8.3.5 兜底次数（judge 输出非 JSON/无分数、重试仍失败时回退 verifier 硬指标：passed→5 / failed→1）：R1 = 5、S1 = 11——S1 兜底更多与其更长轨迹（平均 8.525 次工具调用 vs R1 的 2.4）相关，逐任务兜底分布见 `judge_scores.json` 的 per_task。
+
+---
+
+## 7. 框架差异结论（跨模型消融）
+
+**结论 1｜框架效应稳定（跨 deepseek/MiMo 成立）**：react 精简高效——两模型下均为最少工具调用（2.4 / 2.375）与最低耗时（10.2s / 37.7s），在 MiMo 下 SR 还最高（0.95）；smolagents 调用数与耗时在两模型下均更高（8.525/3.2 次、20.5s/63.5s）。两框架 **Precision 恒 1.0**（五组无一非法工具调用或畸形参数；O2 的 2 个权限违规为语义级越权而非格式错误）——框架的调用格式约束都可靠。
+
+**结论 2｜模型主效应（MiMo 整体弱于 deepseek，难档更明显）**：同框架对比 R1 0.975→R2 0.95、S1 0.95→S2 0.90；deepseek 两组 **L3 全满分**（1.0），MiMo 的 S2/O2 L3 跌至 0.90/0.70——难档任务的成败由模型而非框架主导。
+
+**结论 3｜模型级特征弱点与新增风险面**：tr_001 在 R2/S2 **两组失败**（MiMo 系统性"答案过滤不彻底"，与框架无关）；**首次出现权限违规**——O2 sh_013 MiMo 误退 delivered 订单（全实验唯一 forbidden_call 命中），deepseek 全程从未越权。
+
+> 消融设计意义：同一任务集 + 同一 mock 服务 + 同一工具描述文本、只换 backbone（§9.2 控制变量），使上述"框架效应 / 模型效应"分离可归因。
+
+---
+
+## 8. 评测器进化史（v1.0 → v1.1 → v1.2）
+
+- **v1.1（W2 后，11 个假阴性驱动）**：① **数字容错**——answer_checks 支持千分位/小数（"21,680"/"21,680.00" 去逗号、去尾零后归一化比对）；② **措辞宽松化**——any_of 关键词换稳健表达（"取消"/"修改"可命中"已为您取消"/"修改为"）并由 LLM-judge 兜底；③ **工具描述补全**——`get_order_status` 明确声明返回收货地址/物流单号/发票信息；④ **步数预算**——smolagents/CodeAgent 单独放宽 max_steps（×1.5 或按域配置）；⑤ **校验清单新增两项**。
+- **v1.2（MiMo 消融后）**：① **终态空白归一化**——final_state_checks 空白归一化比较（"88 号" vs "88号"，S2 sh_003 类假阴性）；② **端点级挂死检测**——连续 N 次超时后把任务标记为 endpoint_flaky 并跳过（区别于 timeout，应对 MiMo 端点"接受连接但永不返回"的 30~80 分钟挂死）。
+- **评测器自检清单收益**（任务设计指南.md §7 / §3.7）：任务入库前强制走"空轨迹 fail / GT pass"双向自检 + 自检清单（v1.1 新增"答案对自然表述变体（含数字格式）鲁棒"、"工具描述覆盖可推断返回字段"两条），把"评测器缺陷"拦截在入库阶段而非实验后才发现——两轮实验暴露的 11+1 个假阴性若在入库自检时覆盖，可提前发现；其价值是让"评测难点从能力转向表述规范"这一系统性风险有了制度化防线。
+
+---
+
+## 9. 局限性
+
+1. **O 组为方案 C，非真实 OpenHands**：O1 未跑真实（等价循环，待 W4 方案 A）；O2 的 openhands 适配器实为 react 等价循环，其 0.85 只能代表"同一模型在 openhands 形态适配器"下的表现，真实 OpenHands 的规划/工具形态差异未纳入，跨框架比较以 R/S 组为准。
+2. **成本计费未配置**：litellm 未收录两模型定价，全部 `cost_usd = 0`（含 MiMo 组）——成本维度只能用耗时/token 作代理，§4.2 中 MiMo 组 token 亦未统计。
+3. **judge 同模型双评**：双 judge 实为 `deepseek-v4-flash,deepseek-v4-flash` 跑两遍（README 命令），非两个独立模型，一致性可能被系统性偏差高估；且 R2/S2/O2 的 judge 未运行（待补），人工锚定 W4 待做。
+4. **R2/S2/O2 未做离线复评**：v1.1 复评仅覆盖 R1/S1（reevaluation_v11.json）；MiMo 三组只有自动口径。其中 S2 sh_003（"88号" 空白差异）按 analysis/reevaluate 的复评思路——对终态做空白归一化后重判——**预计可恢复为 PASS，但未实际复评，故不给出恢复后的数字**；O2 sh_011 类 answer_missing 是否假阴性亦待逐例复核。
+5. **分难度口径不统一**：R1/S1 分难度表保留原始 v1.0 口径（复评未按难度重算），与主表复评口径并存时需注意（§2 注）。
+6. **MiMo 端点事故痕迹**：MiMo 实验期间经历挂死/死锁事故，虽经修复与断点续跑/复验（O2 全量 34/40 无挂死），长尾任务的质量仍可能受当时基础设施状态影响（EXPERIMENT_MIMO §5）。
+
+---
+
+## 10. 复现指南
+
+单组实验从零复现（装依赖 → 配 key → 跑编排器 → 汇总/失败分析/复评/judge）见 **`README.md`「复现指南」**：`uv venv .venv && uv pip install -e ".[dev]"` 后 `.venv/bin/python -m harness.orchestrator --config configs/experiment_matrix.yaml --group R1`（每组约 15~40 分钟），产物落 `runs/<日期>_<group>/`，依次用 `metrics.aggregate` / `analysis.failure_modes` / `analysis.reevaluate`（v1.1 复评）/ `judge.judge` 复现本报告各表；dry-run 用 `EVAL_DRY_RUN=1` 验证链路。
