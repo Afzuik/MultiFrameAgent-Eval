@@ -70,14 +70,12 @@ def verify_task(
 
     for sc in task.get("final_state_checks", []):
         value = _deep_get(final_state, sc["path"])
-        if "equals" in sc:
-            if value != sc["equals"]:
-                findings.append(
-                    f"state_mismatch:{sc['path']} expected={sc['equals']!r} got={value!r}"
-                )
-        elif sc.get("exists"):
-            if value is None:
-                findings.append(f"state_missing:{sc['path']}")
+        if "equals" in sc and value != sc["equals"]:
+            findings.append(
+                f"state_mismatch:{sc['path']} expected={sc['equals']!r} got={value!r}"
+            )
+        elif sc.get("exists") and value is None:
+            findings.append(f"state_missing:{sc['path']}")
 
     for ac in task.get("answer_checks", []):
         if "contains" in ac and ac["contains"] not in answer:

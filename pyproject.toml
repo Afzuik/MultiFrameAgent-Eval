@@ -36,6 +36,13 @@ py-modules = ["cli"]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint]
+ignore = [
+    "B008",    # FastAPI/typer 惯用：Body()/Argument() 作为端点/命令参数默认值
+    "BLE001",  # 评测装置鲁棒性优先：适配器/编排器对异常盲捕获并降级为兜底值或 observation
+    "DTZ011",  # run 目录用本地日期命名（runs/<日期>_<group>），非时区敏感场景
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

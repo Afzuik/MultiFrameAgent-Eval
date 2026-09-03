@@ -1,6 +1,7 @@
 """统一 CLI 入口测试：命令路由与参数传递（mock 掉子进程模块调用）。"""
-import cli
 from typer.testing import CliRunner
+
+import cli
 
 runner = CliRunner()
 

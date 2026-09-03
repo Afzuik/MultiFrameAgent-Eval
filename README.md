@@ -32,6 +32,16 @@ EVAL_DRY_RUN=1 .venv/bin/python -m harness.orchestrator \
 
 产出目录 `runs/<日期>_<group>/`：`config.yaml`（配置快照）、`traces/{task_id}.jsonl`（轨迹）、`results.csv`（结果行）、`summary.json`（汇总指标）。
 
+## 项目状态（W1 ✅）
+
+- [x] 仓库初始化：uv + ruff + pytest，Python 3.12
+- [x] 任务集 v1.0：40 任务（3 域 × L1/L2/L3）+ 声明式 verifier 引擎 + 双向自检 80/80
+- [x] mock 工具服务：FastAPI，18 工具（travel 7 / shop 6 / analytics 5），权限与业务规则、实例隔离、确定性，62 项测试
+- [x] 评测装置：harness.protocol 契约 + 自研 ReAct 适配器 + 薄编排器 v0（子进程调度 / 超时强杀 / 断点续跑 / fake_llm dry-run）
+- [x] 指标：metrics.success / cost_latency / aggregate（SR、成本、延迟、summary.json）
+- [x] 验收：dry-run 跑通 travel 域 14 任务，SR = 14/14（`runs/2026-09-03_R1/`），全仓 196 测试全绿
+- [ ] W2：shop/analytics 任务接入、smolagents 适配器、Tool-Call F1、真实模型实验
+
 ## 文档
 
 - `项目方案.md` —— 完整项目方案（任务集 / mock 服务 / harness / 指标 / judge / 实验设计 / 里程碑）

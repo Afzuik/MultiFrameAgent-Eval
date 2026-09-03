@@ -8,8 +8,8 @@ from harness.protocol import (
     Step,
     Trace,
     build_run_spec,
-    load_trace,
     load_tasks,
+    load_trace,
     tool_specs_for_domain,
     write_trace,
 )

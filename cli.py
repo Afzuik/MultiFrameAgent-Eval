@@ -16,7 +16,9 @@ REPO_ROOT = Path(__file__).resolve().parent
 
 
 def _run_module(module: str, args: list[str]) -> int:
-    return subprocess.run([sys.executable, "-m", module, *args], cwd=REPO_ROOT).returncode
+    return subprocess.run(
+        [sys.executable, "-m", module, *args], cwd=REPO_ROOT, check=False
+    ).returncode
 
 
 @app.command()
