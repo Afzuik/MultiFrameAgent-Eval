@@ -26,11 +26,18 @@ from harness.protocol import load_trace
 from metrics.cost_latency import n_tool_calls, total_cost, wall_time
 from metrics.success import load_task
 
+# W2 的 F1 模块由分析 agent 并行开发；未就绪时 F1 列留空
+try:
+    from metrics.tool_f1 import compute_f1 as _compute_f1
+except ImportError:  # pragma: no cover
+    _compute_f1 = None
+
 DIFFICULTIES = ("L1", "L2", "L3")
 
 CSV_COLUMNS = (
     "task_id", "group", "framework", "model", "difficulty", "status",
     "passed", "findings", "cost_usd", "wall_time_s", "n_tool_calls", "n_steps",
+    "f1_recall", "f1_precision", "f1",
 )
 
 _TRUTHY = {"1", "true", "yes", "pass", "passed", "y"}
@@ -119,6 +126,22 @@ def _fill_from_trace(row: dict, trace) -> None:
         row["n_tool_calls"] = n_tool_calls(trace)
     if _is_empty(row.get("n_steps")):
         row["n_steps"] = len(trace.steps)
+    # F1 三列任一为空时按轨迹重算（§7.2 口径；任务/模块缺失则保持留空）
+    if _compute_f1 is not None and any(
+        _is_empty(row.get(k)) for k in ("f1_recall", "f1_precision", "f1")
+    ):
+        try:
+            task = load_task(trace.task_id)
+        except KeyError:
+            return  # 任务库缺失：F1 列保持留空
+        try:
+            f1 = _compute_f1(task, trace)
+            row["f1_recall"] = round(f1["recall"], 4)
+            row["f1_precision"] = round(f1["precision"], 4)
+            row["f1"] = round(f1["f1"], 4)
+        except Exception as exc:
+            # F1 兜底计算异常只影响 F1 列（保持留空），不阻断汇总
+            print(f"[aggregate] F1 兜底计算失败 {trace.task_id}: {exc}")
 
 
 def _fill_difficulty(row: dict) -> None:
@@ -187,9 +210,16 @@ def _aggregate(run_dir: Path) -> dict:
     costs = [_to_float(row.get("cost_usd")) for row in rows]
     walls = [_to_float(row.get("wall_time_s")) for row in rows]
     calls = [_to_float(row.get("n_tool_calls")) for row in rows]
+    # F1：只对非空单元格求均值（老 results.csv 行无 F1 列时由 trace 补算或跳过）
+    f1_values = [_to_float(row.get("f1")) for row in rows
+                 if not _is_empty(row.get("f1"))]
+    recall_values = [_to_float(row.get("f1_recall")) for row in rows
+                     if not _is_empty(row.get("f1_recall"))]
+    precision_values = [_to_float(row.get("f1_precision")) for row in rows
+                        if not _is_empty(row.get("f1_precision"))]
 
     def mean(values: list[float]) -> float:
-        return sum(values) / n_tasks if n_tasks else 0.0
+        return sum(values) / len(values) if values else 0.0
 
     summary = {
         "group": _first_nonempty(rows, "group"),
@@ -203,6 +233,9 @@ def _aggregate(run_dir: Path) -> dict:
         "total_cost_usd": round(sum(costs), 6),
         "mean_wall_time_s": round(mean(walls), 3),
         "mean_tool_calls": round(mean(calls), 3),
+        "mean_f1": round(mean(f1_values), 4),
+        "mean_f1_recall": round(mean(recall_values), 4),
+        "mean_f1_precision": round(mean(precision_values), 4),
         "by_difficulty": {
             d: {
                 "n": n_by_diff[d],

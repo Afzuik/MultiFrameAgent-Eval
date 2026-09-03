@@ -1,8 +1,13 @@
-# 实验矩阵（§9.1）。W1 只启用 R1 组（ReAct × deepseek-v4-flash，travel 域）。
-# 后续里程碑追加 R2/S1/S2/O1/O2 组。
+# 实验矩阵（§9.1）。W2 启用 R1（react）与 S1（smolagents）两组 × 全量三域 40 任务。
+# 后续里程碑追加 R2/S2/O1/O2 组。
 runs:
   - group: R1
     framework: react
     model: deepseek-v4-flash
-    domains: [travel]
-    note: "W1 验收组：ReAct 单框架 travel 域 14 任务"
+    domains: [travel, shop, analytics]
+    note: "ReAct × deepseek-v4-flash，全量 40 任务"
+  - group: S1
+    framework: smolagents
+    model: deepseek-v4-flash
+    domains: [travel, shop, analytics]
+    note: "smolagents × deepseek-v4-flash，全量 40 任务"

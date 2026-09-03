@@ -206,8 +206,17 @@ def test_dry_run_e2e_r1(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrator, "_start_tool_server", lambda p: stub)
     monkeypatch.setattr(orchestrator, "_stop_tool_server", lambda s: s.terminate())
 
-    cfg = protocol.REPO_ROOT / "configs" / "experiment_matrix.yaml"
-    rc = orchestrator.main(["--config", str(cfg), "--group", "R1",
+    # 自含矩阵：e2e 只跑 R1(travel)，与仓库实验矩阵的演进解耦
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(
+        "runs:\n"
+        "  - group: R1\n"
+        "    framework: react\n"
+        "    model: deepseek-v4-flash\n"
+        "    domains: [travel]\n",
+        encoding="utf-8",
+    )
+    rc = orchestrator.main(["--config", str(matrix_path), "--group", "R1",
                             "--dry-run", "--port", str(port)])
     assert rc == 0
 
@@ -224,7 +233,7 @@ def test_dry_run_e2e_r1(tmp_path, monkeypatch):
     assert all(r["status"] == "completed" for r in rows)
     assert all(r["group"] == "R1" and r["framework"] == "react" for r in rows)
     # 断点续跑：重跑同一目录应 SKIP（行数不变）
-    rc2 = orchestrator.main(["--config", str(cfg), "--group", "R1",
+    rc2 = orchestrator.main(["--config", str(matrix_path), "--group", "R1",
                              "--dry-run", "--port", str(port)])
     assert rc2 == 0
     with results_csv.open(newline="", encoding="utf-8") as f:

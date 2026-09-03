@@ -38,12 +38,23 @@ from harness.protocol import (
 )
 from metrics.success import verify_run  # 成败判定唯一权威入口（另一 agent 并行开发）
 
-# results.csv 列序（与 metrics.aggregate.CSV_COLUMNS 保持一致）
+# W2 的 F1 模块由分析 agent 并行开发；未就绪时降级为空值，保证编排器独立可用
+try:
+    from metrics.tool_f1 import compute_f1 as _compute_f1
+except ImportError:  # pragma: no cover —— 模块落地前/独立运行时
+    _compute_f1 = None
+
+# results.csv 列序（与 metrics.aggregate.CSV_COLUMNS 保持一致；新增列只能追加在尾部）
 RESULT_COLUMNS = [
     "task_id", "group", "framework", "model", "difficulty", "status",
     "passed", "findings", "cost_usd", "wall_time_s", "n_tool_calls", "n_steps",
+    "f1_recall", "f1_precision", "f1",
 ]
-ADAPTER_MODULE = "harness.adapters.react"
+# 框架 → 适配器模块（§6.5：同一 CLI 契约，被评框架可插拔）
+ADAPTER_MODULES = {
+    "react": "harness.adapters.react",
+    "smolagents": "harness.adapters.smolagents",
+}
 SERVER_READY_TIMEOUT_S = 30.0      # mock 服务就绪轮询上限
 SERVER_GRACE_S = 30.0              # 单任务 subprocess 超时裕量
 
@@ -161,6 +172,7 @@ def _run_one_task(
     base_url: str,
     run_dir: Path,
     dry_run: bool,
+    adapter_module: str,
 ) -> dict:
     """跑单个任务：reset → 生成 run_spec → 子进程驱动适配器 → 判定。返回 CSV 行。"""
     group_name = group["group"]
@@ -185,6 +197,7 @@ def _run_one_task(
             "status": protocol.STATUS_ERROR, "passed": "False",
             "findings": f"reset_failed:{exc}", "cost_usd": 0.0,
             "wall_time_s": 0.0, "n_tool_calls": 0, "n_steps": 0,
+            "f1_recall": "", "f1_precision": "", "f1": "",
         }
 
     # 2) 预算（§6.4：任务 max_steps 覆盖步数，其余取配置默认）
@@ -215,7 +228,7 @@ def _run_one_task(
 
     # 3) 子进程驱动适配器（超时强杀 → 按 timeout 计）
     proc = subprocess.Popen(
-        [sys.executable, "-m", ADAPTER_MODULE, "--spec", str(spec_path),
+        [sys.executable, "-m", adapter_module, "--spec", str(spec_path),
          "--out", str(trace_path)],
         cwd=str(protocol.REPO_ROOT),
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -259,6 +272,16 @@ def _run_one_task(
         "n_tool_calls": len(trace.tool_calls()),
         "n_steps": trace.model_turns,
     }
+    # 7) Tool-Call F1（§7.2；模块未就绪时留空，由 aggregate 兜底补算）
+    if _compute_f1 is not None:
+        try:
+            f1 = _compute_f1(task, trace)
+            row["f1_recall"] = round(f1["recall"], 4)
+            row["f1_precision"] = round(f1["precision"], 4)
+            row["f1"] = round(f1["f1"], 4)
+        except Exception as exc:  # F1 计算异常不得影响主流程
+            row["f1_recall"] = row["f1_precision"] = row["f1"] = ""
+            print(f"[{group_name}] {task_id} F1 计算异常: {exc}")
     return row
 
 
@@ -267,6 +290,13 @@ def run_group(group: dict, models_cfg: dict, default_budget: dict,
     """跑一个 group：遍历 domains 下全部任务，返回本组通过数。"""
     group_name = group["group"]
     model_cfg = models_cfg["models"][group["model"]]
+    framework = group["framework"]
+    if framework not in ADAPTER_MODULES:
+        raise KeyError(
+            f"group={group_name} 的 framework={framework!r} 没有对应适配器；"
+            f"可用: {sorted(ADAPTER_MODULES)}"
+        )
+    adapter_module = ADAPTER_MODULES[framework]
     run_dir = _group_run_dir(group_name)
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -277,7 +307,7 @@ def run_group(group: dict, models_cfg: dict, default_budget: dict,
         "model_cfg": model_cfg,
         "default_budget": default_budget,
         "dry_run": dry_run,
-        "adapter": ADAPTER_MODULE,
+        "adapter": adapter_module,
     })
 
     results_csv = run_dir / "results.csv"
@@ -291,7 +321,7 @@ def run_group(group: dict, models_cfg: dict, default_budget: dict,
                 print(f"[{group_name}] {task_id} SKIP (已存在于 results.csv)")
                 continue
             row = _run_one_task(group, task, model_cfg, default_budget,
-                                base_url, run_dir, dry_run)
+                                base_url, run_dir, dry_run, adapter_module)
             _append_result(results_csv, row)
             done_ids.add(task_id)
             n_total += 1
@@ -299,6 +329,7 @@ def run_group(group: dict, models_cfg: dict, default_budget: dict,
             n_passed += 1 if row["passed"] == "True" else 0
             print(f"[{group_name}] {task_id} {mark} "
                   f"findings={row['findings']} "
+                  f"f1={row.get('f1', '')} "
                   f"cost={row['cost_usd']}$ time={row['wall_time_s']}s")
     if n_total:
         print(f"[{group_name}] 汇总: SR={n_passed}/{n_total} "
