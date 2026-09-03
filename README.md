@@ -25,12 +25,28 @@ uv pip install --python .venv/bin/python -e ".[dev]"
 EVAL_DRY_RUN=1 .venv/bin/python -m harness.orchestrator \
     --config configs/experiment_matrix.yaml --group R1
 
-# 真实运行（需先设置 configs/models.yaml 中对应模型的 api_key_env 环境变量）
+# 真实运行（需先设置 configs/models.yaml 中对应模型的 api_key_env 环境变量，
+# 如 DEEPSEEK_API_KEY / MIMO_API_KEY / DASHSCOPE_API_KEY）
 .venv/bin/python -m harness.orchestrator \
     --config configs/experiment_matrix.yaml --group R1
 ```
 
-产出目录 `runs/<日期>_<group>/`：`config.yaml`（配置快照）、`traces/{task_id}.jsonl`（轨迹）、`results.csv`（结果行）、`summary.json`（汇总指标）。
+## 复现指南（30 分钟一组完整实验）
+
+1. **装依赖**：`uv venv .venv --python 3.12 && uv pip install --python .venv/bin/python -e ".[dev]"`
+2. **配置模型 key**（任选其一即可复现一组）：`export DEEPSEEK_API_KEY=...` 或 `export MIMO_API_KEY=...`（见 `configs/models.yaml` 各条目 `api_key_env`）
+3. **跑一组实验**：`.venv/bin/python -m harness.orchestrator --config configs/experiment_matrix.yaml --group R1`（约 15~40 分钟，产出 `runs/<日期>_R1/`：results.csv + 40 份轨迹 + run_spec + config.yaml 快照）
+4. **看结果**：
+   - 汇总指标：`.venv/bin/python -m metrics.aggregate runs/<日期>_R1`
+   - 失败分布：`.venv/bin/python -m analysis.failure_modes runs/<日期>_R1`
+   - 自动报告：`.venv/bin/python -m analysis.report runs/<日期>_R1 -o 报告.md`
+   - 历史结果 v1.1 离线复评：`.venv/bin/python -m analysis.reevaluate runs/<日期>_R1`
+   - LLM-as-judge 评分：`.venv/bin/python -m judge.judge runs/<日期>_R1 --judge-models deepseek-v4-flash,deepseek-v4-flash`
+   - Dashboard：`.venv/bin/python -m streamlit run dashboard/app.py`
+
+产出目录 `runs/<日期>_<group>/`：`config.yaml`（配置快照）、`traces/{task_id}.jsonl`（轨迹）、`results.csv`（结果行）、`summary.json`（汇总指标）、`failure_modes.json`（失败分布）、`judge_scores.json`（judge 评分）。
+
+断点续跑：重跑同一 group 会自动跳过已完成任务（按 task_id）；中断后直接重跑即可。
 
 ## 项目状态（W3 ✅）
 
