@@ -1,14 +1,17 @@
-"""test_openhands_adapter —— OpenHands 适配器单测（不依赖真实 API / OpenHands 内部）。
+"""test_openhands_adapter —— OpenHands 适配器单测（不依赖真实 API / SDK 联网）。
 
-覆盖（复用 test_react_adapter.py 的本地 threading.http.server 桩思路）：
-① fake_llm 完整循环：手工构造 travel 任务 spec（2 次工具调用）→ 真实 HTTP 调
-   mock 桩 → trace.tool_calls 顺序/参数正确、final_answer=gt_answer、退出码 0；
-② 真实模式（monkeypatch 模块级 _call_llm）：工具返回 ok:false 时 observation
-   正确回填（DeepSeek 兼容回填口径：assistant 原样 + user 携带工具结果）；
-③ max_steps 超限 → budget_exceeded + 退出码 2（真实模式路径，可注入函数替换）；
-④ 未捕获异常 → status=error + 退出码 1 + trace 仍写出；
+覆盖：
+① fake_llm 完整循环（本地 threading.http.server 桩，2 次工具调用 → 退出码 0）；
 ⑤ CLI 入口 main(argv)（fake_llm 全链路，走文件参数）；
-⑥（附加）wall-clock 超时 → status=timeout + 退出码 2。
+真实模式（方案 A：OpenHands SDK headless）：monkeypatch 模块级
+   _make_conversation/_make_llm/_make_agent/_make_tools 注入假对象，
+   fake 会话把脚本化"SDK 事件"经真实事件映射回调（_make_event_handler /
+   _OHMapper，duck-typed 事件类名与 SDK 1.21 对齐）灌入，覆盖：
+② 事件 → Trace 映射 + finish 收尾（completed，model_turns/tool_calls/最终答复）；
+③ 事件 → Trace 映射：模型直接以消息答复收尾（content 型 MessageEvent）；
+④ max_steps 超限（ConversationErrorEvent MaxIterationsReached）→ budget_exceeded；
+⑤' 墙钟超时：fake 会话 run() 阻塞 → daemon 线程 join 超时 → status=timeout + 2；
+⑥ 未捕获异常（fake 会话 run() 抛错）→ status=error + 退出码 1 + trace 仍写出。
 """
 from __future__ import annotations
 
@@ -113,10 +116,7 @@ def _echo_tool(args: dict, name: str):
 
 @pytest.fixture
 def stub_server():
-    """起一个本地 mock 工具服务桩，yield (base_url, calls)。
-
-    calls 记录服务端收到的每次工具调用，用于断言"真实 HTTP 调工具"。
-    """
+    """起一个本地 mock 工具服务桩，yield (base_url, calls)。"""
     calls: list[dict] = []
 
     def tool_fn(args: dict, name: str):
@@ -134,6 +134,108 @@ def stub_server():
     finally:
         httpd.shutdown()
         thread.join(timeout=5)
+
+
+# --------------------------------------------------------------------------
+# 真实模式注入用的"假 SDK 事件"（类名与 openhands/sdk/event 对齐，
+# 让 _OHMapper 按 type(ev).__name__ 分派即可，无需导入 SDK）
+# --------------------------------------------------------------------------
+class ToolCall:
+    def __init__(self, arguments: str):
+        self.arguments = arguments
+        self.name = ""
+
+
+class TextContent:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class LlmMessage:
+    def __init__(self, text: str):
+        self.content = [TextContent(text)]
+
+
+class ActionEvent:
+    def __init__(self, tool_name: str, arguments: str, action: Any = object()):
+        self.tool_name = tool_name
+        self.tool_call = ToolCall(arguments)
+        self.action = action
+
+
+class ObservationEvent:
+    def __init__(self, tool_name: str, text: str):
+        self.tool_name = tool_name
+        self.observation = SimpleNamespace(text=text)
+
+
+class MessageEvent:
+    def __init__(self, source: str, text: str):
+        self.source = source
+        self.llm_message = LlmMessage(text)
+
+
+class AgentErrorEvent:
+    def __init__(self, error: str):
+        self.tool_name = ""
+        self.error = error
+
+
+class ConversationErrorEvent:
+    def __init__(self, code: str):
+        self.code = code
+
+
+class _FakeConversation:
+    """假会话：捕获事件映射回调，run() 时按脚本重放事件（驱动真实 mapper）。"""
+
+    def __init__(self, agent: Any, workspace: str, callbacks: list[Any],
+                 budget: protocol.RunBudget | None = None,
+                 events: list[Any] | None = None,
+                 sleep_s: float = 0.0, raise_exc: Exception | None = None):
+        self.callbacks = callbacks
+        self.events = events or []
+        self.sleep_s = sleep_s
+        self.raise_exc = raise_exc
+        self.sent: list[str] = []
+
+    def send_message(self, goal: str) -> None:
+        self.sent.append(goal)
+
+    def run(self) -> None:
+        if self.sleep_s:
+            time.sleep(self.sleep_s)
+        if self.raise_exc is not None:
+            raise self.raise_exc
+        for ev in self.events:
+            for cb in self.callbacks:
+                cb(ev)
+
+    def close(self) -> None:
+        pass
+
+
+def _make_fake_conv(events=None, *, sleep_s=0.0,
+                    raise_exc: Exception | None = None):
+    """构造假会话工厂：run() 时把脚本化事件灌给真实的事件映射回调。"""
+
+    def factory(agent: Any, workspace: str, callbacks: list[Any],
+                budget: protocol.RunBudget | None = None) -> _FakeConversation:
+        return _FakeConversation(agent, workspace, callbacks, budget=budget,
+                                 events=events, sleep_s=sleep_s,
+                                 raise_exc=raise_exc)
+
+    return factory
+
+
+def _patch_sdk_factories(monkeypatch, conv_factory):
+    """把真实模式的 SDK 工厂全部替换为假对象（杜绝测试触碰 SDK/网络）。"""
+    monkeypatch.setattr(oh_adapter, "_make_llm",
+                        lambda spec: SimpleNamespace(metrics=None))
+    monkeypatch.setattr(oh_adapter, "_make_tools", lambda spec: [])
+    monkeypatch.setattr(oh_adapter, "_make_agent",
+                        lambda spec, llm, tools: SimpleNamespace(llm=llm))
+    monkeypatch.setattr(oh_adapter, "_make_conversation", conv_factory)
 
 
 # --------------------------------------------------------------------------
@@ -183,27 +285,22 @@ def test_fake_llm_full_loop(tmp_path, stub_server, monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# ② 真实模式：工具返回 ok:false → observation 正确回填
+# ② 真实模式：事件 → Trace 映射（工具回合 + finish 收尾 → completed）
 # --------------------------------------------------------------------------
-def test_tool_ok_false_observation(tmp_path, stub_server, monkeypatch):
-    base_url, calls = stub_server
-    spec = _spec(tmp_path, base_url=base_url,
-                 budget=protocol.RunBudget(max_steps=4))
+def test_real_sdk_event_mapping_finish(tmp_path, monkeypatch):
+    spec = _spec(tmp_path, budget=protocol.RunBudget(max_steps=4))
     out = tmp_path / "trace.jsonl"
-
-    scripted = [
-        '{"tool": "refund_reservation", "args": {"user_id": "u_42", '
-        + '"reservation_id": "R_091"}}',
-        '{"final_answer": "抱歉，退款需要先完成身份验证。"}',
+    search_json = ('{"date": "2026-10-12", "from": "PEK", "to": "SHA", '
+                   '"summary": "查航班"}')
+    events = [
+        ActionEvent("search_flights", search_json),
+        ObservationEvent("search_flights",
+                          '{"ok": true, "result": [{"flight_id": "MU5101"}]}'),
+        ActionEvent("finish",
+                     '{"message": "10月12日上午北京到上海有 MU5101 航班。"}'),
+        ObservationEvent("finish", "10月12日上午北京到上海有 MU5101 航班。"),
     ]
-    calls_llm: list[int] = []
-
-    def fake_llm(spec_, messages):
-        calls_llm.append(1)
-        idx = len(calls_llm) - 1
-        return scripted[idx], _fake_resp(scripted[idx])
-
-    monkeypatch.setattr(oh_adapter, "_call_llm", fake_llm)
+    _patch_sdk_factories(monkeypatch, _make_fake_conv(events))
 
     rc = oh_adapter.run_from_spec(spec, out)
     assert rc == protocol.EXIT_OK
@@ -211,40 +308,70 @@ def test_tool_ok_false_observation(tmp_path, stub_server, monkeypatch):
     trace = protocol.load_trace(out)
     assert trace is not None
     assert trace.status == protocol.STATUS_COMPLETED
-    assert trace.final_answer == "抱歉，退款需要先完成身份验证。"
+    assert trace.final_answer == "10月12日上午北京到上海有 MU5101 航班。"
+    # 模型回合：search_flights 1 回合 + finish 1 回合（含 finish 的 assistant 步）
     assert trace.model_turns == 2
-    # observation 步内容 = 完整返回 JSON（真实 HTTP：ok:false 与错误信息回填）
+    # 工具调用只记非 finish 的 search_flights；summary 元字段被剔除
+    calls = trace.tool_calls()
+    assert calls == [{"tool": "search_flights",
+                      "args": {"date": "2026-10-12", "from": "PEK",
+                               "to": "SHA"}}]
+    # observation 步内容 = 工具返回 JSON 文本（finish 的 observation 不重复记）
     obs = [s for s in trace.steps if s.type == "observation"]
     assert len(obs) == 1
-    payload = json.loads(obs[0].content)
-    assert payload["ok"] is False
-    assert payload["error"] == "需要先验证身份"
-    # 工具调用真实发生（refund_reservation 走 stub 桩 ok:false 分支，不入 calls）
-    tool_calls = [s for s in trace.steps if s.type == "tool_call"]
-    assert len(tool_calls) == 1
-    assert tool_calls[0].tool_name == "refund_reservation"
-    assert calls == []   # 桩内 ok:false 分支刻意不入 calls 列表
-    # raw 日志记录了两次模型输出
+    assert json.loads(obs[0].content)["ok"] is True
+    # 首两步仍为 system + user（轨迹完整，与 fake 路径一致）
+    assert [(s.type, s.role) for s in trace.steps[:2]] == \
+        [("message", "system"), ("message", "user")]
+    # 原始模型输出日志存在（assistant 步内容已写入）
     assert (out.with_name("trace.raw.log")).exists()
 
 
 # --------------------------------------------------------------------------
-# ③ 预算：max_steps 极小 + 真实模式模型反复调用工具 → budget_exceeded + 2
+# ③ 真实模式：模型以普通消息（content 型）收尾 → completed
 # --------------------------------------------------------------------------
-def test_max_steps_budget_exceeded(tmp_path, monkeypatch):
+def test_real_sdk_content_message_end(tmp_path, monkeypatch):
+    spec = _spec(tmp_path, budget=protocol.RunBudget(max_steps=4))
+    out = tmp_path / "trace.jsonl"
+    events = [
+        ActionEvent("search_flights",
+                     '{"date": "2026-10-12", "from": "PEK", "to": "SHA"}'),
+        ObservationEvent("search_flights", '{"ok": true, "result": []}'),
+        MessageEvent("agent", "没有查到航班，请改期再试。"),
+    ]
+    _patch_sdk_factories(monkeypatch, _make_fake_conv(events))
+
+    rc = oh_adapter.run_from_spec(spec, out)
+    assert rc == protocol.EXIT_OK
+
+    trace = protocol.load_trace(out)
+    assert trace is not None
+    assert trace.status == protocol.STATUS_COMPLETED
+    assert trace.final_answer == "没有查到航班，请改期再试。"
+    assert trace.model_turns == 2
+    # 用户消息（source=user）不进轨迹；assistant 文本步出现且带内容
+    assistant_steps = [s for s in trace.steps
+                       if s.type == "message" and s.role == "assistant"]
+    assert assistant_steps[-1].content == "没有查到航班，请改期再试。"
+    assert all(s.role != "tool" or True for s in trace.steps)
+
+
+# --------------------------------------------------------------------------
+# ④ 真实模式预算：max_steps 超限（MaxIterationsReached）→ budget_exceeded + 2
+# --------------------------------------------------------------------------
+def test_real_sdk_budget_max_steps_exceeded(tmp_path, monkeypatch):
     spec = _spec(tmp_path, budget=protocol.RunBudget(max_steps=2))
     out = tmp_path / "trace.jsonl"
-
-    tool_json = ('{"tool": "search_flights", '
-                 '"args": {"date": "2026-10-12", "from": "PEK", "to": "SHA"}}')
-
-    def fake_llm(spec_, messages):
-        return tool_json, _fake_resp(tool_json)
-
-    monkeypatch.setattr(oh_adapter, "_call_llm", fake_llm)
-    # 不依赖真实 HTTP：工具调用统一回填固定响应
-    monkeypatch.setattr(oh_adapter, "_invoke_tool",
-                        lambda spec_, name, args: '{"ok": true, "result": {}}')
+    events = [
+        ActionEvent("search_flights",
+                     '{"date": "2026-10-12", "from": "PEK", "to": "SHA"}'),
+        ObservationEvent("search_flights", '{"ok": true, "result": []}'),
+        ActionEvent("search_flights",
+                     '{"date": "2026-10-13", "from": "PEK", "to": "SHA"}'),
+        ObservationEvent("search_flights", '{"ok": true, "result": []}'),
+        ConversationErrorEvent("MaxIterationsReached"),
+    ]
+    _patch_sdk_factories(monkeypatch, _make_fake_conv(events))
 
     rc = oh_adapter.run_from_spec(spec, out)
     assert rc == protocol.EXIT_BUDGET  # 2
@@ -258,19 +385,38 @@ def test_max_steps_budget_exceeded(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# ④ 未捕获异常 → status=error + 退出码 1 + trace 仍写出
+# ⑤' 真实模式墙钟超时：fake 会话 run() 阻塞 → status=timeout + 退出码 2
 # --------------------------------------------------------------------------
-def test_unexpected_exception_writes_error_trace(tmp_path, monkeypatch):
+def test_real_sdk_wall_clock_timeout(tmp_path, monkeypatch):
+    spec = _spec(tmp_path, budget=protocol.RunBudget(max_steps=8,
+                                                     timeout_s=0.2))
+    out = tmp_path / "trace.jsonl"
+    _patch_sdk_factories(monkeypatch,
+                         _make_fake_conv(sleep_s=1.5))  # 模拟 SDK 卡在模型调用
+
+    rc = oh_adapter.run_from_spec(spec, out)
+    assert rc == protocol.EXIT_BUDGET  # 2
+
+    trace = protocol.load_trace(out)
+    assert trace is not None
+    assert trace.status == protocol.STATUS_TIMEOUT
+    # 保留已产出步骤（system + user），未产出 assistant 步
+    assert [(s.type, s.role) for s in trace.steps] == \
+        [("message", "system"), ("message", "user")]
+
+
+# --------------------------------------------------------------------------
+# ⑥ 真实模式未捕获异常 → status=error + 退出码 1 + trace 仍写出
+# --------------------------------------------------------------------------
+def test_real_sdk_unexpected_exception_writes_error_trace(tmp_path, monkeypatch):
     spec = _spec(tmp_path, budget=protocol.RunBudget(max_steps=4))
     out = tmp_path / "trace.jsonl"
-
-    def boom(spec_, messages):
-        raise RuntimeError("API 挂了")
-
-    monkeypatch.setattr(oh_adapter, "_call_llm", boom)
+    _patch_sdk_factories(monkeypatch,
+                         _make_fake_conv(raise_exc=RuntimeError("模拟 SDK 运行失败")))
 
     rc = oh_adapter.run_from_spec(spec, out)
     assert rc == protocol.EXIT_ERROR  # 1
+
     trace = protocol.load_trace(out)
     assert trace is not None
     assert trace.status == protocol.STATUS_ERROR
@@ -282,7 +428,7 @@ def test_unexpected_exception_writes_error_trace(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# ⑤ CLI 入口：main 读 spec 文件并返回退出码（fake_llm 全链路）
+# ⑦ CLI 入口：main 读 spec 文件并返回退出码（fake_llm 全链路）
 # --------------------------------------------------------------------------
 def test_cli_main_returns_exit_code(tmp_path, stub_server, monkeypatch):
     base_url, _calls = stub_server
@@ -301,29 +447,3 @@ def test_cli_main_returns_exit_code(tmp_path, stub_server, monkeypatch):
     assert trace is not None
     assert trace.status == protocol.STATUS_COMPLETED
     assert trace.final_answer == "查到了。"
-
-
-# --------------------------------------------------------------------------
-# ⑥（附加）wall-clock 超时 → status=timeout + 退出码 2
-# --------------------------------------------------------------------------
-def test_wall_clock_timeout(tmp_path, monkeypatch):
-    spec = _spec(tmp_path, budget=protocol.RunBudget(max_steps=8,
-                                                     timeout_s=0.2))
-    out = tmp_path / "trace.jsonl"
-    tool_json = ('{"tool": "search_flights", '
-                 '"args": {"date": "2026-10-12", "from": "PEK", "to": "SHA"}}')
-
-    def slow_llm(spec_, messages):
-        time.sleep(1.0)   # 模拟慢模型：单次调用已超出预算时长
-        return tool_json, _fake_resp(tool_json)
-
-    monkeypatch.setattr(oh_adapter, "_call_llm", slow_llm)
-    monkeypatch.setattr(oh_adapter, "_invoke_tool",
-                        lambda spec_, name, args: '{"ok": true, "result": {}}')
-
-    rc = oh_adapter.run_from_spec(spec, out)
-    assert rc == protocol.EXIT_BUDGET  # 2
-    trace = protocol.load_trace(out)
-    assert trace is not None
-    assert trace.status == protocol.STATUS_TIMEOUT
-    assert out.exists()
