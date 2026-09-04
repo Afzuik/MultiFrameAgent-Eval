@@ -12,7 +12,7 @@
 | S1 | smolagents | deepseek-v4-flash | 0.95† | 0.787 | 20.5s | 8.5 | 2 |
 | R2 | react | mimo-v2.5-pro | 0.95 | 0.783 | 37.7s | 2.4 | 2 |
 | S2 | smolagents | mimo-v2.5-pro | 0.90 | 0.798 | 63.5s | 3.2 | 4 |
-| O2 | openhands(C) | mimo-v2.5-pro | 0.85 | 0.728 | 29.7s | 2.7 | 6 |
+| O2 | openhands(A) | mimo-v2.5-pro | 0.925 | 0.773 | 26.1s | 2.8 | 3 |
 
 † R1/S1 为离线复评口径（原始 0.75/0.90，v1.1 修复 11 个 verifier 假阴性后 0.975/0.95，见 reevaluation_v11.json）。
 

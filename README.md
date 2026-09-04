@@ -56,7 +56,8 @@ EVAL_DRY_RUN=1 .venv/bin/python -m harness.orchestrator \
 - [x] 最终实验报告 `docs/REPORT_FINAL.md` + 6 例轨迹案例研究 `docs/CASESTUDY.md`
 - [x] judge 全 5 组评分（R1 4.39 / S1 4.34 / R2 4.72 / S2 4.34 / O2 4.45）
 - [x] MIT LICENSE + 30 分钟复现指南；全仓 268 测试全绿
-- [ ] 后续可选：OpenHands 方案 A 回归、judge 人工锚定、GitHub push、样例数据
+- [x] OpenHands 方案 A 回归：真实 SDK headless 驱动，O1（deepseek）SR 0.90 / O2（MiMo）SR 0.925（runs/2026-09-04_O1|O2/）
+- [ ] 后续可选：judge 人工锚定、GitHub push、样例数据
 
 ## 文档
 
