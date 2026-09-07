@@ -25,7 +25,7 @@ runs:
     framework: openhands
     model: deepseek-v4-flash
     domains: [travel, shop, analytics]
-    note: "OpenHands × deepseek-v4-flash（W3 方案 C；真实实验待 W4 方案 A 回归后）"
+    note: "OpenHands × deepseek-v4-flash"
   - group: O2
     framework: openhands
     model: mimo-v2.5-pro
